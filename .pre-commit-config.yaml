@@ -1,0 +1,19 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --fix
+        language: system
+        types: [python]
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
+        language: system
+        types: [python]
+      - id: policy-lint
+        name: policy lint
+        entry: uv run a15 policy-lint
+        language: system
+        pass_filenames: false
+        files: ^src/article15/(policy|case)/

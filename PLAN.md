@@ -1,9 +1,8 @@
 # Article 15: a multi-agent desk for GDPR access requests
 
-**Build plan v0.2, 2026-11-20. Status: draft for review. Nothing is built yet.**
+**Build plan v0.3, 2026-11-20. Status: confirmed; build in progress (milestone M0).**
 
-How to review: read sections 1, 2 and 17 (decisions) first. Reply "confirmed" (with any changes to section 17)
-and the build starts at milestone M0.
+Decisions are settled in section 17.
 
 ## 1. Summary
 
@@ -468,7 +467,12 @@ A check that has never been seen to fail can't be trusted.
 
 - **Rate limits** per session and per IP (for example 3 runs per hour, 10 per day), and a short human check on run
   submission.
-- **A hard daily model-spend cap.** When it is reached, new live runs pause and the demo offers recorded runs.
+- **A hard daily model-spend cap of EUR 2** on the shared key. When it is reached, new live runs pause and the demo
+  offers recorded runs, or the visitor can bring their own key.
+- **Bring your own key.** A visitor can paste their own Mistral or DeepSeek API key to run live past the cap:
+  - the key is held in server memory for that session only, never written to disk, logs or traces;
+  - it is used only for that visitor's runs and dropped when the session ends or after 1 hour;
+  - the page says plainly where the key goes and which provider receives the visitor's text.
 - **Input limits:** maximum length, allowed languages, and requests only on behalf of the fictional customers.
 - **No real personal data.** The form states it plainly. A detector rejects text that looks like real personal data
   (real email domains, phone numbers that aren't in the fictional range). Visitor text is never used for anything
@@ -650,8 +654,8 @@ re-measured with real token counts in M2.
   - JSON output mode exists. If the output isn't valid JSON, `content` can come back blank, so the provider layer
     validates and retries.
   - Caching is automatic and best-effort. Usage reports cache hits and misses.
-- **Endpoint and limits:** OpenAI-format base URL `https://api.deepseek.com`; an Anthropic-format endpoint also
-  exists. Concurrency limits are 2500 (flash) and 500 (pro) per account.
+- **Endpoint and limits:** OpenAI-format base URL `https://api.deepseek.com`.
+  Concurrency limits are 2500 (flash) and 500 (pro) per account.
 - **Data location:** the privacy policy (updated Feb 10, 2026) says data is collected, processed and stored "in
   People's Republic of China". It also lists training on "User Input" as a use. Whether that covers API inputs
   isn't settled on that page; the terms of use and the model-training disclosure page are still to be read
@@ -702,14 +706,14 @@ https://docs.mistral.ai/inference/regional-inference)
 |---|---|---|---|
 | D1 | Project | Article 15 access-request desk | - |
 | D2 | Agent core | Own small core | LangGraph; OpenAI Agents SDK (also works with compatible providers) |
-| D3 | Models | Development and evals: `deepseek-flash` (off-peak), with `deepseek-v4-pro` where E4 shows it's needed. Public demo: Mistral EU endpoint, because visitor text stays in the EU (section 15.3) | DeepSeek for the demo too (cheapest; data processed in China); Mistral for everything |
-| D4 | Daily spend cap for the public demo | your number | - |
+| D3 | Models | **Confirmed:** DeepSeek for development and evals; Mistral EU endpoint for the public demo | - |
+| D4 | Daily spend cap for the public demo | **Confirmed:** EUR 2 per day on the shared key. Past the cap, visitors can bring their own API key (section 11.3) | - |
 | D5 | Web app | React + TypeScript + Tailwind | Server-rendered pages (simpler, less polished) |
 | D6 | Hosting | One EU virtual server with Docker Compose | A platform service (Fly.io, Render, Railway) |
 | D7 | Domain | Your own domain | The host's free subdomain |
 | D8 | Request languages | French and English | English only |
 | D9 | Repository | Public on GitHub from the start, MIT licence | Private until launch |
-| D10 | Build size | Full plan (~26 days) | Minimum version (~12 days) first |
+| D10 | Build size | **Confirmed:** full plan (~26 days) | - |
 
 ## 18. Requirement traceability
 

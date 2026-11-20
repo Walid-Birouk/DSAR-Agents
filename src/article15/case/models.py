@@ -1,0 +1,92 @@
+"""The case file: everything known about one access request."""
+
+from __future__ import annotations
+
+from datetime import date, datetime
+from enum import StrEnum
+
+from pydantic import BaseModel, Field
+
+from article15.case.approvals import Approval
+from article15.case.deadlines import Deadlines, deadlines_for
+from article15.schemas import (
+    DiscoveryResult,
+    IdentityDecision,
+    IntakeResult,
+    LetterDraft,
+    RedactionPlan,
+    System,
+    ValidationReport,
+)
+
+
+class CaseState(StrEnum):
+    RECEIVED = "RECEIVED"
+    INTAKE_DONE = "INTAKE_DONE"
+    IDENTITY_CHECK = "IDENTITY_CHECK"
+    AWAITING_REQUESTER = "AWAITING_REQUESTER"
+    IDENTITY_VERIFIED = "IDENTITY_VERIFIED"
+    DISCOVERY_DONE = "DISCOVERY_DONE"
+    REDACTION_DONE = "REDACTION_DONE"
+    DRAFT_READY = "DRAFT_READY"
+    VALIDATED = "VALIDATED"
+    AWAITING_APPROVAL = "AWAITING_APPROVAL"
+    APPROVED = "APPROVED"
+    RELEASED = "RELEASED"
+    CLOSED = "CLOSED"
+    # side exits
+    REJECTED = "REJECTED"
+    NEEDS_HUMAN = "NEEDS_HUMAN"
+    EXTENDED = "EXTENDED"
+    PARTIAL = "PARTIAL"
+
+
+class Flags(BaseModel):
+    special_category_found: bool = False
+    possibly_excessive: bool = False
+    other_rights_requested: bool = False
+
+
+class HumanDecision(BaseModel):
+    """Recorded when a person settles an edge case (excessive request, other rights, special categories)."""
+
+    by: str
+    at: datetime
+    decision: str
+    reason: str
+
+
+class Transition(BaseModel):
+    from_state: CaseState
+    to_state: CaseState
+    at: datetime
+    policy_version: str
+    note: str = ""
+
+
+class Case(BaseModel):
+    case_id: str
+    state: CaseState = CaseState.RECEIVED
+    received_on: date
+    deadlines: Deadlines
+    flags: Flags = Field(default_factory=Flags)
+
+    intake: IntakeResult | None = None
+    identity: IdentityDecision | None = None
+    discovery: DiscoveryResult | None = None
+    redaction: RedactionPlan | None = None
+    redaction_check_passed: bool = False
+    letter: LetterDraft | None = None
+    validation: ValidationReport | None = None
+    pack_hash: str | None = None
+    approval: Approval | None = None
+
+    human_decision: HumanDecision | None = None
+    extension_reason: str | None = None
+    rejection_reason: str | None = None
+    partial_systems: list[System] = Field(default_factory=list)
+    history: list[Transition] = Field(default_factory=list)
+
+    @classmethod
+    def open(cls, case_id: str, received_on: date) -> Case:
+        return cls(case_id=case_id, received_on=received_on, deadlines=deadlines_for(received_on))
