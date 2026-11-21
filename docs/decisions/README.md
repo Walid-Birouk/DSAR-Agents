@@ -17,5 +17,6 @@ Short records of decisions that shape the project. Each states the choice, why i
 | [0011](0011-eval-harness.md) | Eval harness: suites, exact graders, judge, budget-capped runner, broken versions | provisional |
 | [0012](0012-multi-agent-desk.md) | Seven-agent desk, proof of control, claims cross-check, shadow mode, release service | provisional |
 | [0013](0013-advisor-observability-resilience.md) | DPO advisor over A2A, OpenTelemetry without personal data, retries, breakers, checkpoints | provisional |
+| [0014](0014-web-app.md) | Web app: FastAPI, sandboxes, SSE, the reviewer, audit log; React app with Playwright tests | provisional |
 
 Provisional decisions, made while the project owner was away, are listed in [pending-review.md](pending-review.md).

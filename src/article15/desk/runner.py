@@ -301,8 +301,10 @@ def release_probe(session: CaseSession) -> None:
 
 @asynccontextmanager
 async def open_desk(
-    request: RequestCase, desk: Desk, cfg: RunConfig, run_dir: Path
+    request: RequestCase, desk: Desk, cfg: RunConfig, run_dir: Path, reopen: bool = False
 ) -> AsyncIterator[OpenDesk]:
+    """Set up a desk for one case. `reopen` keeps the case's earlier events and writes this session's spans
+    to a numbered file, for a resumed run or a reviewer's action on a paused case."""
     runtime = run_dir / "runtime"
     runtime.mkdir(parents=True, exist_ok=True)
     clock = SimClock.for_case(request.received_on)
@@ -316,7 +318,7 @@ async def open_desk(
         tool_timeout_s=cfg.tool_timeout_s,
     )
     servers = {name: build_named(name, ctx, notifier) for name in SERVER_NAMES}
-    events = JsonlSink(run_dir / "events.jsonl", base={"case_id": request.case_id})
+    events = JsonlSink(run_dir / "events.jsonl", base={"case_id": request.case_id}, append=reopen)
     tracing = open_tracing(request.case_id, desk) if cfg.telemetry else None
     sink: EventSink = TeeSink([events, tracing.sink]) if tracing else events
     system = prompts.system_prompt(desk.policy, desk.register)
@@ -377,7 +379,12 @@ async def open_desk(
             case_tools=case_tools,
         )
     if tracing is not None:
-        tracing.finish(run_dir / "spans.jsonl")
+        spans = run_dir / "spans.jsonl"
+        n = 1
+        while reopen and spans.exists():
+            n += 1
+            spans = run_dir / f"spans-{n}.jsonl"
+        tracing.finish(spans)
 
 
 async def run_case(
@@ -399,7 +406,7 @@ async def run_case(
     if resume and snapshot is None:
         raise ValueError(f"no checkpoint to resume {request.case_id} from in {run_dir}")
     budget = Budget(caps=cfg.caps)
-    async with open_desk(request, desk, cfg, run_dir) as d:
+    async with open_desk(request, desk, cfg, run_dir, reopen=resume) as d:
         session = d.session
         if snapshot is not None:
             await restore(d, snapshot)
@@ -536,3 +543,21 @@ async def run_many(
         for case_id in case_ids:
             tg.start_soon(one, case_id)
     return [results[c] for c in case_ids]
+
+
+@asynccontextmanager
+async def reopen_desk(request: RequestCase, desk: Desk, cfg: RunConfig) -> AsyncIterator[OpenDesk]:
+    """A paused case (waiting for approval, say) opened again from its last checkpoint, for a person's action.
+    Every change is checkpointed; the case file and pack on disk are rewritten when the block ends."""
+    run_dir = cfg.out_dir / request.case_id
+    checkpoints = CheckpointStore(run_dir / "runtime" / "checkpoints.sqlite")
+    snapshot = checkpoints.latest(request.case_id)
+    if snapshot is None:
+        raise ValueError(f"no checkpoint for {request.case_id} in {run_dir}")
+    async with open_desk(request, desk, cfg, run_dir, reopen=True) as d:
+        await restore(d, snapshot)
+        d.session.on_change = checkpoints.save
+        yield d
+        _write_json(run_dir / "case.json", d.session.case.model_dump(mode="json"))
+        if d.session.pack is not None:
+            (run_dir / "pack.json").write_bytes(pack_bytes(d.session.pack))

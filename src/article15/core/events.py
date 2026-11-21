@@ -65,10 +65,12 @@ class ListSink:
 class JsonlSink:
     path: Path
     base: dict[str, Scalar] = field(default_factory=dict)
+    append: bool = False  # keep earlier events (a resumed or reopened case)
 
     def __post_init__(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text("", encoding="utf-8")
+        if not self.append or not self.path.exists():
+            self.path.write_text("", encoding="utf-8")
 
     def emit(self, name: str, **attrs: Scalar) -> None:
         _check(name, attrs)

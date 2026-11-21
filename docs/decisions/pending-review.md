@@ -50,3 +50,13 @@ When a decision is confirmed, mark its record "accepted" and remove it from this
 | P27 | Case lock lease: 20 minutes | 0013 | shorter, with heartbeats |
 | P28 | Observability stack images: collector 0.165.0, Jaeger 2.23.0, Prometheus 3.16.0, Grafana 13.2.6; ports on 127.0.0.1 only | 0013 | a hosted tracing service |
 | P29 | Seventh broken version is `raw_prompts_to_telemetry` via a debug switch (`TRACE_CONTENTS`); "injection defences removed" waits for a live model | 0013 | a scripted gullible agent now |
+| P30 | In-process job queue (asyncio, 2 workers) instead of arq/RQ with Redis | [0014](0014-web-app.md) | Redis queue now |
+| P31 | Sandboxes: per-session runtime stores and files over the shared read-only company databases; deleted after 24 h | 0014 | a full copy of the databases per session |
+| P32 | Scripted mode (the oracle on prepared cases) when no model is configured; visitor text needs live mode | 0014 | no demo without a key |
+| P33 | Demo provider Mistral EU (`A15_WEB_PROVIDER`), no fallback; daily cap counted 1:1 in USD against EUR 2 | 0014 | an exchange-rate setting |
+| P34 | Limits only on live runs (3/h, 10/day per session); scripted runs unlimited; per-IP limits and human check in M7 | 0014 | limits on every run |
+| P35 | "Approve and send" is one action (approval, then release immediately) | 0014 | approve, then a separate send |
+| P36 | "My runs" stands in for the recorded-runs gallery until live cassettes exist | 0014 | a curated gallery of oracle runs |
+| P37 | Downloads: pack JSON and letter Markdown; no PDF yet | 0014 | a PDF library now |
+| P38 | Break-it "blocked" = no foreign record in a pack and no impostor verified | 0014 | the full injection-success grader |
+| P39 | Frontend: React 19.3.1, Vite 8.3.8, Tailwind 4.3.5, TypeScript 7.0.2, react-router 7.18.6, Playwright 1.65.1 | 0014 | - |

@@ -2,8 +2,8 @@
 
 **A multi-agent desk that answers GDPR right-of-access requests, with evals, observability and policy as code.**
 
-> Status: in development (milestone M5: the DPO advisor over A2A, OpenTelemetry tracing without personal data,
-> and resilience: retries, circuit breakers, provider fallback, checkpoints and resume).
+> Status: in development (milestone M6: the web app: try a request, watch the agents, be the reviewer, try to
+> break it, read the eval results). Not deployed yet.
 > A public demo will follow; see [PLAN.md](PLAN.md).
 
 Anyone can ask a company for a copy of all their personal data (GDPR Article 15), and the company has one month
@@ -38,6 +38,14 @@ uv run a15 run --replay evals/cassettes/m2         # replay them offline, free; 
 
 Each case's run directory holds the case file, the pack and its letter, the transcript, the tool log and the
 trace events. Events carry no personal data.
+
+## The web app
+
+```bash
+cd frontend && npm ci && npm run build && cd ..
+uv run a15 web                    # http://127.0.0.1:8000; without a model key, prepared cases run scripted
+cd frontend && npm run test:e2e   # Playwright: the whole flow in a browser, plus accessibility checks
+```
 
 ## Advisor and observability
 

@@ -192,6 +192,39 @@ def _cmd_advisor(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_web(args: argparse.Namespace) -> int:
+    import logging
+    import os
+
+    import uvicorn
+
+    from article15.company.store import DataPaths
+    from article15.core.live import live_provider
+    from article15.settings import ModelSettings, SettingsError, load_dotenv
+    from article15.web.app import create_app
+    from article15.web.service import WebConfig
+
+    logging.getLogger("mcp").setLevel(logging.CRITICAL)
+    load_dotenv()
+    provider, model = None, ""
+    if not args.scripted:
+        try:
+            settings = ModelSettings.from_env(provider=os.environ.get("A15_WEB_PROVIDER", "mistral"))
+            provider, model = live_provider(settings, fallback=False), settings.model
+        except SettingsError as exc:
+            print(f"no live model ({exc}); prepared cases run with the scripted agent", file=sys.stderr)
+    cfg = WebConfig(
+        data=DataPaths(Path(args.data)),
+        root=Path(args.root),
+        arm=args.arm,
+        live_provider=provider,
+        live_model=model,
+    )
+    print(f"web app on http://{args.host}:{args.port} ({'live: ' + model if provider else 'scripted'})")
+    uvicorn.run(create_app(cfg), host=args.host, port=args.port, log_level="warning")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     from article15.company.generator import DEFAULT_SEED
     from article15.mcp_servers.registry import SERVER_NAMES
@@ -229,6 +262,14 @@ def main(argv: list[str] | None = None) -> int:
     adv.add_argument("--port", type=int, default=8700)
     adv.add_argument("--public-url", help="the URL the Agent Card advertises (default: http://host:port)")
     adv.set_defaults(fn=_cmd_advisor)
+    web = sub.add_parser("web", help="run the web app (API + the built React app in frontend/dist)")
+    web.add_argument("--host", default="127.0.0.1")
+    web.add_argument("--port", type=int, default=8000)
+    web.add_argument("--data", default="data/generated")
+    web.add_argument("--root", default="runs/web", help="sandboxes, the web store and the audit log")
+    web.add_argument("--arm", choices=["single", "team"], default="team")
+    web.add_argument("--scripted", action="store_true", help="never call a model, even when a key is set")
+    web.set_defaults(fn=_cmd_web)
     from article15.evals.cli import add_parser as add_eval_parser
 
     add_eval_parser(sub)
