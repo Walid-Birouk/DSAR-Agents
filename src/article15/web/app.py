@@ -33,6 +33,13 @@ class StartRun(BaseModel):
     subject: str = Field(default="", max_length=200)
     text: str = Field(default="", max_length=4000)
     source: str = Field(default="preset", pattern="^(preset|visitor|break)$")
+    challenge: str = ""
+    nonce: str = ""
+
+
+class OwnKey(BaseModel):
+    provider: str = Field(pattern="^(mistral|deepseek)$")
+    key: str = Field(min_length=16, max_length=200)
 
 
 class Review(BaseModel):
@@ -66,6 +73,11 @@ def create_app(cfg: WebConfig, frontend: Path | None = FRONTEND) -> FastAPI:
     async def web_error(_: Request, exc: WebError) -> JSONResponse:
         return JSONResponse({"error": str(exc)}, status_code=exc.status)
 
+    def client_ip(request: Request) -> str:
+        if cfg.trust_proxy and (forwarded := request.headers.get("x-forwarded-for")):
+            return forwarded.split(",")[0].strip()
+        return request.client.host if request.client else "unknown"
+
     def session(request: Request, response: Response) -> str:
         sid = request.cookies.get(COOKIE)
         if not sid or not service.store.has_session(sid):
@@ -91,14 +103,45 @@ def create_app(cfg: WebConfig, frontend: Path | None = FRONTEND) -> FastAPI:
         return service.presets(break_it=kind == "break")
 
     @app.post("/api/runs")
-    async def start(body: StartRun, sid: str = Depends(session)) -> dict[str, str]:
+    async def start(body: StartRun, request: Request, sid: str = Depends(session)) -> dict[str, str]:
         visitor = None
         if body.customer_id:
             visitor = Visitor(body.customer_id, body.subject, body.text)
         elif not body.case_id:
             raise HTTPException(400, "give a prepared case_id, or a customer_id and your text")
-        run_id = await service.start(sid, case_id=body.case_id, visitor=visitor, source=body.source)
+
+        def admit() -> None:
+            service.admit_live(client_ip(request), body.challenge, body.nonce)
+
+        run_id = await service.start(
+            sid, case_id=body.case_id, visitor=visitor, source=body.source, admit=admit
+        )
         return {"run_id": run_id}
+
+    @app.get("/api/challenge")
+    def challenge() -> dict[str, object]:
+        return service.human.challenge()
+
+    @app.get("/api/session")
+    def my_session(sid: str = Depends(session)) -> dict[str, Any]:
+        return {
+            "live": service.live_for(sid),
+            "own_key": service.keys.provider_of(sid),
+            "human_check": cfg.human_check,
+        }
+
+    @app.post("/api/byok")
+    def bring_key(body: OwnKey, sid: str = Depends(session)) -> dict[str, Any]:
+        try:
+            service.keys.put(sid, body.provider, body.key)
+        except ValueError as exc:
+            raise WebError(str(exc)) from exc
+        return {"own_key": body.provider, "expires_in_s": int(service.keys.ttl_s)}
+
+    @app.delete("/api/byok")
+    def drop_key(sid: str = Depends(session)) -> dict[str, Any]:
+        service.keys.drop(sid)
+        return {"own_key": None}
 
     @app.get("/api/runs")
     def runs(sid: str = Depends(session)) -> list[dict[str, Any]]:

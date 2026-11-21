@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, KIND_LABELS, type Customer, type Preset, type System } from "../api";
+import { api, humanCheck, KIND_LABELS, session, type Customer, type Preset, type SessionInfo, type System } from "../api";
 
 export default function TryIt() {
   const navigate = useNavigate();
@@ -13,11 +13,15 @@ export default function TryIt() {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [me, setMe] = useState<SessionInfo | null>(null);
+  const [keyProvider, setKeyProvider] = useState("mistral");
+  const [key, setKey] = useState("");
 
   useEffect(() => {
     api.presets("try").then(setPresets).catch((e: Error) => setError(e.message));
     api.system().then(setSystem).catch(() => undefined);
     api.customers().then(setCustomers).catch(() => undefined);
+    session.info().then(setMe).catch(() => undefined);
   }, []);
 
   const byKind = useMemo(() => {
@@ -31,7 +35,8 @@ export default function TryIt() {
     setBusy(true);
     setError(null);
     try {
-      const { run_id } = await api.start(body);
+      const check = me?.live && me.human_check ? await humanCheck() : {};
+      const { run_id } = await api.start({ ...body, ...check });
       navigate(`/runs/${run_id}`);
     } catch (e) {
       setError((e as Error).message);
@@ -50,7 +55,11 @@ export default function TryIt() {
         </p>
         {system && (
           <p className="mt-2 text-sm text-slate-600">
-            Mode: <strong>{system.mode === "live" ? "live model" : "scripted agent (no model, no cost)"}</strong> ·
+            Mode:{" "}
+            <strong>
+              {me?.own_key ? `live, on your own ${me.own_key} key` : system.mode === "live" ? "live model" : "scripted agent (no model, no cost)"}
+            </strong>{" "}
+            ·
             policy v{system.policy_version}
           </p>
         )}
@@ -113,7 +122,7 @@ export default function TryIt() {
         <h2 id="own" className="text-xl font-semibold">
           Or write your own, as one of the customers
         </h2>
-        {system?.mode !== "live" ? (
+        {!me?.live ? (
           <p className="mt-2 text-slate-700">
             Writing your own request needs a live model, which is switched off right now. The prepared requests above
             always work.
@@ -174,6 +183,68 @@ export default function TryIt() {
             </button>
           </form>
         )}
+      </section>
+
+      <section aria-labelledby="byok">
+        <details>
+          <summary id="byok" className="cursor-pointer text-lg font-semibold">
+            Bring your own API key
+          </summary>
+          <p className="mt-2 max-w-3xl text-sm text-slate-700">
+            Past the daily budget, or to write your own request, you can use your own Mistral or DeepSeek key. It is
+            kept in the server's memory for your session only, for an hour at most, used only for your runs, and never
+            written to disk, logs or traces. Your request text goes to that provider: Mistral's EU endpoint keeps it
+            in the EU; DeepSeek processes data in China.
+          </p>
+          {me?.own_key ? (
+            <button
+              type="button"
+              className="mt-2 rounded border border-slate-400 px-3 py-1.5"
+              onClick={() => session.dropKey().then(() => session.info().then(setMe))}
+            >
+              Forget my {me.own_key} key
+            </button>
+          ) : (
+            <form
+              className="mt-2 flex flex-wrap items-end gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                session
+                  .bringKey(keyProvider, key)
+                  .then(() => {
+                    setKey("");
+                    return session.info().then(setMe);
+                  })
+                  .catch((err: Error) => setError(err.message));
+              }}
+            >
+              <label className="text-sm">
+                Provider
+                <select
+                  className="ml-1 rounded border border-slate-300 bg-white p-1.5"
+                  value={keyProvider}
+                  onChange={(e) => setKeyProvider(e.target.value)}
+                >
+                  <option value="mistral">Mistral (EU)</option>
+                  <option value="deepseek">DeepSeek</option>
+                </select>
+              </label>
+              <label className="text-sm">
+                Key
+                <input
+                  type="password"
+                  autoComplete="off"
+                  className="ml-1 rounded border border-slate-300 p-1.5"
+                  value={key}
+                  onChange={(e) => setKey(e.target.value)}
+                />
+              </label>
+              <button type="submit" className="rounded bg-slate-800 px-3 py-1.5 text-white">
+                Use my key
+              </button>
+            </form>
+          )}
+        </details>
       </section>
     </div>
   );

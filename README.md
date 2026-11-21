@@ -2,9 +2,11 @@
 
 **A multi-agent desk that answers GDPR right-of-access requests, with evals, observability and policy as code.**
 
-> Status: in development (milestone M6: the web app: try a request, watch the agents, be the reviewer, try to
-> break it, read the eval results). Not deployed yet.
-> A public demo will follow; see [PLAN.md](PLAN.md).
+> Status: built through M7's offline part, not deployed. Every milestone's code and tests are in; no model has
+> been called yet (no API key), so the agents' numbers are still to measure. The harness is verified on a perfect
+> agent: green on all 160 cases, every hard gate at 0, and seven broken versions that each turn it red
+> ([eval report](docs/eval-report.md)). Decisions made while the owner was away are listed in
+> [docs/decisions/pending-review.md](docs/decisions/pending-review.md).
 
 Anyone can ask a company for a copy of all their personal data (GDPR Article 15), and the company has one month
 to answer without leaking anyone else's data. Article 15 handles that end to end for a fictional French online
@@ -83,6 +85,16 @@ The fictional shop, its built-in difficulties and how the test cases are labelle
 [docs/company.md](docs/company.md). How the servers keep each case to one verified person is in
 [decision 0008](docs/decisions/0008-subject-scoped-access.md). How the agent core, the stage tools and
 record/replay work is in [decision 0010](docs/decisions/0010-agent-core-and-baseline.md).
+
+## Documentation
+
+- [PLAN.md](PLAN.md): the build plan
+- [docs/architecture.md](docs/architecture.md): how the plan maps onto the code
+- [docs/decisions/](docs/decisions/README.md): one record per design decision
+- [docs/policy.md](docs/policy.md) and [policy.yaml](src/article15/policy/policy.yaml): the rules and their sources
+- [docs/eval-report.md](docs/eval-report.md): what is measured so far
+- [docs/threat-model.md](docs/threat-model.md): threats and the controls that stop them
+- [docs/running.md](docs/running.md): running locally, deploying, self-hosting
 
 ## Licence
 

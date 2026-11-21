@@ -124,7 +124,9 @@ def test_a_visitors_own_text_needs_a_live_model(world: World, client: TestClient
 
 def test_live_runs_are_rate_limited(data: DataPaths, tmp_path: Path) -> None:
     provider = ScriptedProvider(script_of(["..."] * 50))
-    with _client(data, tmp_path, live_provider=provider, live_model="m", runs_per_hour=1) as c:
+    with _client(
+        data, tmp_path, live_provider=provider, live_model="m", runs_per_hour=1, human_check=False
+    ) as c:
         first = c.post(
             "/api/runs", json={"customer_id": "C0001", "subject": "RGPD", "text": "Mes données svp"}
         )

@@ -219,6 +219,7 @@ def _cmd_web(args: argparse.Namespace) -> int:
         arm=args.arm,
         live_provider=provider,
         live_model=model,
+        trust_proxy=os.environ.get("A15_TRUST_PROXY") == "1",
     )
     print(f"web app on http://{args.host}:{args.port} ({'live: ' + model if provider else 'scripted'})")
     uvicorn.run(create_app(cfg), host=args.host, port=args.port, log_level="warning")

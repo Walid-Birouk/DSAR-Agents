@@ -22,6 +22,7 @@ import json
 import logging
 import secrets
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
@@ -30,11 +31,13 @@ from typing import Any
 from article15.case.models import CaseState
 from article15.company.models import CaseKind, CaseTruth, RequestCase
 from article15.company.store import DataPaths, load_cases, load_people, load_truths, read_only
+from article15.core.live import live_provider
 from article15.core.provider import Provider
 from article15.desk import release as reviewer
 from article15.desk.runner import Desk, RunConfig, reopen_desk, run_case
 from article15.evals.oracle import ScriptedProvider, oracle, team_agents, team_script
 from article15.schemas import Channel, System
+from article15.web.guards import HumanCheck, IpLimiter, VisitorKeys, real_data_problems
 from article15.web.store import WebStore, now
 
 log = logging.getLogger(__name__)
@@ -69,6 +72,10 @@ class WebConfig:
     daily_cap_usd: float = 2.0  # D4: EUR 2 a day; counted 1:1 in USD, which stays under the cap
     sandbox_ttl: timedelta = timedelta(hours=24)
     eval_reports: list[Path] = field(default_factory=lambda: [Path("evals/reports"), Path("runs/eval")])
+    human_check: bool = True  # a proof of work before every live run (guards.py)
+    trust_proxy: bool = False  # take the client address from X-Forwarded-For (behind the reverse proxy)
+    ip_runs_per_hour: int = 3
+    ip_runs_per_day: int = 10
 
 
 @dataclass
@@ -88,12 +95,27 @@ class DeskService:
         self.slots = asyncio.Semaphore(cfg.workers)
         self.tasks: dict[str, asyncio.Task[None]] = {}
         self.visitor_requests: dict[str, RequestCase] = {}
+        self.keys = VisitorKeys()
+        self.human = HumanCheck()
+        self.ips = IpLimiter(cfg.ip_runs_per_hour, cfg.ip_runs_per_day)
 
     # --- catalogue -----------------------------------------------------------------------------------------
 
     @property
     def live(self) -> bool:
         return self.cfg.live_provider is not None
+
+    def live_for(self, session_id: str) -> bool:
+        return self.live or self.keys.provider_of(session_id) is not None
+
+    def _live_provider(self, session_id: str) -> tuple[Provider, bool]:
+        """The provider of a live run: the visitor's own key when they gave one (no daily cap: their money),
+        else the shared key (capped)."""
+        own = self.keys.build(session_id, lambda s: live_provider(s, fallback=False))
+        if own is not None:
+            return own[0], True
+        assert self.cfg.live_provider is not None
+        return self.cfg.live_provider, False
 
     def customers(self) -> list[dict[str, Any]]:
         with read_only(self.cfg.data.db(System.CRM)) as con:
@@ -127,7 +149,7 @@ class DeskService:
     # --- starting runs
     # -----------------------------------------------------------------------------------------
 
-    def _check_limits(self, session_id: str) -> None:
+    def _check_limits(self, session_id: str, own_key: bool = False) -> None:
         if (
             self.store.count_runs(session_id, now() - timedelta(hours=1), mode="live")
             >= self.cfg.runs_per_hour
@@ -136,7 +158,7 @@ class DeskService:
         if self.store.count_runs(session_id, now() - timedelta(days=1), mode="live") >= self.cfg.runs_per_day:
             raise WebError(f"at most {self.cfg.runs_per_day} live runs per day; try a prepared case", 429)
         start = now().replace(hour=0, minute=0, second=0, microsecond=0)
-        if self.store.spent_since(start) >= self.cfg.daily_cap_usd:
+        if not own_key and self.store.spent_since(start) >= self.cfg.daily_cap_usd:
             raise WebError("today's model budget is spent; prepared cases still run (no model)", 429)
 
     def _visitor_request(self, run_id: str, v: Visitor) -> RequestCase:
@@ -154,31 +176,56 @@ class DeskService:
             text=v.text.strip(),
         )
 
+    def admit_live(self, ip: str, challenge: str, nonce: str) -> None:
+        """What a live run must pass before it starts: the human check and the per-IP limit."""
+        if self.cfg.human_check and not self.human.verify(challenge, nonce):
+            raise WebError("the human check failed or expired; try again", 403)
+        if not self.ips.allow(ip):
+            raise WebError("too many live runs from this address; try a prepared case", 429)
+
     async def start(
         self,
         session_id: str,
         case_id: str | None = None,
         visitor: Visitor | None = None,
         source: str = "preset",
+        admit: Callable[[], None] | None = None,
     ) -> str:
         run_id = secrets.token_hex(8)
+        live: Provider | None = None
         if visitor is not None:
-            if not self.live:
+            if not self.live_for(session_id):
                 raise WebError("writing your own request needs a live model; try a prepared case", 409)
-            self._check_limits(session_id)
+            problems = real_data_problems(visitor.subject + " " + visitor.text)
+            if problems:
+                raise WebError(
+                    "this looks like real personal data: "
+                    + "; ".join(problems)
+                    + ". Use only the shop's fictional customers.",
+                    422,
+                )
+            live, own = self._live_provider(session_id)
+            self._check_limits(session_id, own)
+            if admit:
+                admit()
             request, truth, mode = self._visitor_request(run_id, visitor), None, "live"
             self.visitor_requests[run_id] = request
         else:
             if case_id not in self.requests:
                 raise WebError("unknown case", 404)
             request, truth = self.requests[case_id], self.truths[case_id]
-            mode = "live" if self.live else "scripted"
+            mode = "live" if self.live_for(session_id) else "scripted"
             if mode == "live":
-                self._check_limits(session_id)
+                live, own = self._live_provider(session_id)
+                self._check_limits(session_id, own)
+                if admit:
+                    admit()
         self.store.add_run(run_id, session_id, request.case_id, mode, self.cfg.arm, source)
         if source == "break":
             self.store.add_attempt(run_id, truth.kind.value if truth else "visitor")
-        self.tasks[run_id] = asyncio.create_task(self._execute(run_id, session_id, request, truth, mode))
+        self.tasks[run_id] = asyncio.create_task(
+            self._execute(run_id, session_id, request, truth, mode, live)
+        )
         return run_id
 
     def run_config(self, session_id: str, run_id: str) -> RunConfig:
@@ -189,10 +236,12 @@ class DeskService:
             arm=self.cfg.arm,
         )
 
-    def _provider(self, request: RequestCase, truth: CaseTruth | None, mode: str) -> Provider:
+    def _provider(
+        self, request: RequestCase, truth: CaseTruth | None, mode: str, live: Provider | None = None
+    ) -> Provider:
         if mode == "live":
-            assert self.cfg.live_provider is not None
-            return self.cfg.live_provider
+            assert live is not None
+            return live
         assert truth is not None
         name = self.desk.people[truth.requester.person_id].name
         script = oracle(truth, request, self.desk.register, name)
@@ -203,13 +252,21 @@ class DeskService:
         return ScriptedProvider(script)
 
     async def _execute(
-        self, run_id: str, session_id: str, request: RequestCase, truth: CaseTruth | None, mode: str
+        self,
+        run_id: str,
+        session_id: str,
+        request: RequestCase,
+        truth: CaseTruth | None,
+        mode: str,
+        live: Provider | None = None,
     ) -> None:
         async with self.slots:
             self.store.update_run(run_id, status="running")
             cfg = self.run_config(session_id, run_id)
             try:
-                outcome = await run_case(request, truth, self.desk, cfg, self._provider(request, truth, mode))
+                outcome = await run_case(
+                    request, truth, self.desk, cfg, self._provider(request, truth, mode, live)
+                )
             except Exception as exc:  # a crash is recorded, never shown as a result
                 log.exception("run %s failed", run_id)
                 self.store.update_run(

@@ -1,0 +1,19 @@
+# Automatic HTTPS for the demo's domain (Let's Encrypt), security headers, and a request-size limit.
+{$A15_DOMAIN} {
+	encode zstd gzip
+	request_body {
+		max_size 64KB
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'"
+		-Server
+	}
+	reverse_proxy app:8000 {
+		flush_interval -1
+	}
+}

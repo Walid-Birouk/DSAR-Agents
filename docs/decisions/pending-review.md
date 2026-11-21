@@ -15,7 +15,8 @@ When a decision is confirmed, mark its record "accepted" and remove it from this
 | E1 (single vs team) and E2 (shadow vs guarded) with a real model | the same key | M4 "done when" |
 | Review of the golden 20 (`evals/golden/golden-20.md`, answers in `ratings.yaml`) | about 2 hours | trusting the eval labels; calibrating the judge |
 | Validate the collector config and bring up `deploy/observability` | the Docker daemon running | the private Jaeger/Grafana stack |
-| The public deployment (M7) | an EU server account, optionally a domain, a GitHub repository | the live demo |
+| The public deployment (M7): build the image, `docker compose up` on the server, HTTPS, alerts | an EU server account, a domain, a GitHub repository; the Docker daemon | the live demo |
+| Public red-team round, the 2-minute video, CV lines | the live demo; you | the launch |
 
 ## Provisional decisions
 
@@ -60,3 +61,10 @@ When a decision is confirmed, mark its record "accepted" and remove it from this
 | P37 | Downloads: pack JSON and letter Markdown; no PDF yet | 0014 | a PDF library now |
 | P38 | Break-it "blocked" = no foreign record in a pack and no impostor verified | 0014 | the full injection-success grader |
 | P39 | Frontend: React 19.3.1, Vite 8.3.8, Tailwind 4.3.5, TypeScript 7.0.2, react-router 7.18.6, Playwright 1.65.1 | 0014 | - |
+| P40 | Input detector: emails must be `.example`, phones in ARCEP fiction ranges, IPs in documentation blocks; IBAN, card (Luhn) and NIR refused | [0015](0015-launch-preparation.md) | Presidio-based detection |
+| P41 | Human check = self-hosted SHA-256 proof of work (16 bits), live runs only | 0015 | a third-party CAPTCHA (Turnstile, hCaptcha) |
+| P42 | Per-IP limits 3/h and 10/day on live runs; X-Forwarded-For trusted only with A15_TRUST_PROXY=1 | 0015 | limits at the proxy |
+| P43 | Bring-your-own-key: memory only, per session, 1 h; the daily cap does not apply to the visitor's own key | 0015 | cap every run |
+| P44 | One image for web and advisor; non-root, read-only containers; Caddy 2.11.9 automatic HTTPS; image tags pinned | 0015 | a platform service (D6 alternative) |
+| P45 | Nightly online backup of the web store (sessions, runs, audit log), kept 14 days; sandboxes not backed up | 0015 | also back up sandboxes |
+| P46 | Security headers and CSP at Caddy; 64 KB request-body limit | 0015 | - |

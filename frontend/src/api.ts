@@ -164,3 +164,35 @@ export const STATE_LABELS: Record<string, string> = {
   EXTENDED: "Deadline extended",
   PARTIAL: "Partial (a system was down)",
 };
+
+export type SessionInfo = { live: boolean; own_key: string | null; human_check: boolean };
+
+export const session = {
+  info: () => call<SessionInfo>("/api/session"),
+  bringKey: (provider: string, key: string) => post<{ own_key: string }>("/api/byok", { provider, key }),
+  dropKey: () => call<{ own_key: null }>("/api/byok", { method: "DELETE" }),
+};
+
+// The human check: find a nonce whose SHA-256 with the server's challenge starts with `bits` zero bits.
+async function leadingZeroBits(challenge: string, nonce: number, bits: number): Promise<boolean> {
+  const data = new TextEncoder().encode(`${challenge}:${nonce}`);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", data));
+  let left = bits;
+  for (const byte of digest) {
+    if (left <= 0) return true;
+    if (left >= 8) {
+      if (byte !== 0) return false;
+      left -= 8;
+    } else {
+      return byte >> (8 - left) === 0;
+    }
+  }
+  return true;
+}
+
+export async function humanCheck(): Promise<{ challenge: string; nonce: string }> {
+  const { challenge, bits } = await call<{ challenge: string; bits: number }>("/api/challenge");
+  for (let n = 0; ; n++) {
+    if (await leadingZeroBits(challenge, n, bits)) return { challenge, nonce: String(n) };
+  }
+}

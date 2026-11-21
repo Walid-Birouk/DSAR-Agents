@@ -1,0 +1,46 @@
+# The public deployment (PLAN.md 11.2, M7): one EU server, Docker Compose, Caddy in front with automatic HTTPS.
+#
+#   cp deploy/production.env.example deploy/production.env   # fill in; never commit it
+#   docker compose -f deploy/docker-compose.yml --env-file deploy/production.env up -d --build
+#
+# The private observability stack is separate (deploy/observability/), reached over an SSH tunnel.
+name: a15
+
+services:
+  app:
+    build: ..
+    env_file: production.env
+    environment:
+      A15_TRUST_PROXY: "1"  # the client address comes from Caddy's X-Forwarded-For
+      A15_OTLP_ENDPOINT: ${A15_OTLP_ENDPOINT:-}
+    volumes:
+      - runs:/app/runs
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  advisor:
+    build: ..
+    command: ["/app/.venv/bin/a15", "advisor", "--host", "0.0.0.0", "--port", "8700"]
+    env_file: production.env
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.11.9-alpine
+    ports: ["80:80", "443:443"]
+    environment:
+      A15_DOMAIN: ${A15_DOMAIN:?set A15_DOMAIN in production.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [app]
+    restart: unless-stopped
+
+volumes:
+  runs: {}
+  caddy-data: {}
+  caddy-config: {}
