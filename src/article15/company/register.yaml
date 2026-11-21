@@ -1,0 +1,215 @@
+# Ferlane's register of processing, as told to customers: the information an access reply must give
+# (GDPR Art. 15(1)(a)-(h) and 15(2)). Ferlane is fictional; every entry names its source.
+#
+# Sources (read 2026-11-21):
+#   REF     CNIL, "Référentiel relatif aux traitements de données à caractère personnel mis en œuvre aux fins
+#           de gestion des activités commerciales",
+#           https://www.cnil.fr/sites/default/files/atoms/files/referentiel_traitements-donnees-caractere-personnel_gestion-activites-commerciales.pdf
+#   COOKIES CNIL, recommandation « cookies et autres traceurs » (délibération n° 2020-092, consolidated version
+#           modified by délibération n° 2025-131 of 18 December 2025),
+#           https://www.cnil.fr/sites/default/files/2026-01/recommandation_cookies_consolidee.pdf
+#   PLAINTE CNIL, « Adresser une plainte », https://www.cnil.fr/fr/adresser-une-plainte
+#   GDPR    Regulation (EU) 2016/679
+#   D0010   Ferlane's own choices, made by the project owner (docs/decisions/0010-agent-core-and-baseline.md)
+
+version: 1
+controller:
+  name: Ferlane
+  privacy_contact: privacy@ferlane.example
+
+legal_bases:
+  contract:
+    fr: exécution du contrat (art. 6.1.b du RGPD)
+    en: performance of a contract (Art. 6(1)(b) GDPR)
+  legal_obligation:
+    fr: obligation légale (art. 6.1.c du RGPD)
+    en: legal obligation (Art. 6(1)(c) GDPR)
+  consent:
+    fr: consentement (art. 6.1.a du RGPD)
+    en: consent (Art. 6(1)(a) GDPR)
+  legitimate_interest:
+    fr: intérêt légitime (art. 6.1.f du RGPD)
+    en: legitimate interest (Art. 6(1)(f) GDPR)
+
+purposes:
+  - id: orders
+    legal_basis: contract
+    source: REF p. 3 (a), p. 4
+    fr: Gestion des commandes, de la livraison, des factures et des paiements
+    en: Managing orders, delivery, invoices and payments
+    retention:
+      source: REF p. 4, p. 11
+      fr: >-
+        Pendant la relation contractuelle, puis en archive intermédiaire aussi longtemps que la loi l'impose
+        (par exemple 10 ans pour les pièces comptables) ou que la preuve d'un contrat peut être nécessaire, dans
+        la limite du délai de prescription.
+      en: >-
+        For the duration of the contractual relationship, then in intermediate archives for as long as the law
+        requires (for example 10 years for accounting records) or as proof of the contract may be needed, within
+        the applicable limitation period.
+  - id: accounting
+    legal_basis: legal_obligation
+    source: REF p. 3 (c), p. 4
+    fr: Tenue de la comptabilité
+    en: Keeping the accounts
+    retention:
+      source: REF p. 4
+      fr: La durée légale de conservation, en archive intermédiaire (par exemple 10 ans pour l'obligation comptable).
+      en: The period set by law, in intermediate archives (for example 10 years for accounting obligations).
+  - id: account
+    legal_basis: contract
+    source: REF p. 11
+    fr: Gestion de votre compte client
+    en: Managing your customer account
+    retention:
+      source: REF p. 11
+      fr: >-
+        Jusqu'à la suppression du compte. Un compte resté inactif pendant 2 ans est supprimé, après vous en avoir
+        averti.
+      en: Until the account is deleted. An account left inactive for 2 years is deleted, after a warning to you.
+  - id: customer_service
+    legal_basis: contract
+    source: REF p. 3 (e), p. 5
+    fr: Service client, traitement des réclamations et service après-vente
+    en: Customer service, complaints and after-sales service
+    retention:
+      source: REF p. 5
+      fr: Pendant la relation contractuelle.
+      en: For the duration of the contractual relationship.
+  - id: prospecting
+    legal_basis: consent
+    source: REF p. 3 (g), p. 5 (art. L. 34-5 du CPCE)
+    fr: Envoi de notre lettre d'information et d'offres par SMS, si vous l'avez accepté
+    en: Sending our newsletter and SMS offers, if you agreed to them
+    retention:
+      source: REF p. 5, p. 11
+      fr: Jusqu'au retrait de votre consentement, ou 3 ans après votre dernier contact avec nous.
+      en: Until you withdraw your consent, or 3 years after your last contact with us.
+  - id: partner_offers
+    legal_basis: consent
+    source: REF p. 9
+    fr: Transmission de vos coordonnées à des partenaires commerciaux pour leurs propres offres, si vous l'avez accepté
+    en: Passing your contact details to commercial partners for their own offers, if you agreed to it
+    retention:
+      source: REF p. 5, p. 11
+      fr: Jusqu'au retrait de votre consentement, ou 3 ans après votre dernier contact avec nous.
+      en: Until you withdraw your consent, or 3 years after your last contact with us.
+  - id: audience_measurement
+    legal_basis: legitimate_interest
+    source: COOKIES p. 10; D0010
+    fr: Mesure d'audience et fonctionnement du site
+    en: Audience measurement and running the website
+    retention:
+      source: COOKIES p. 10
+      fr: >-
+        Nos cookies de mesure d'audience ont une durée de vie de 13 mois au plus ; les informations collectées
+        sont conservées 25 mois au plus.
+      en: >-
+        Our audience-measurement cookies last 13 months at most; the information collected is kept for 25 months
+        at most.
+  - id: rights_requests
+    legal_basis: legal_obligation
+    source: REF p. 11
+    fr: Traitement de vos demandes d'exercice de droits, comme celle-ci
+    en: Handling your requests to exercise your rights, such as this one
+    retention:
+      source: REF p. 11
+      fr: >-
+        Jusqu'à notre réponse ; la réponse est ensuite conservée comme preuve, dans la limite du délai de
+        prescription applicable.
+      en: >-
+        Until we answer; the answer is then kept as proof, within the applicable limitation period.
+
+categories:
+  - id: identity
+    systems: [crm]
+    source: REF p. 7
+    fr: "Identité et coordonnées : nom, prénom, adresse électronique, téléphone, adresse postale, langue"
+    en: "Identity and contact details: name, first name, email address, phone, postal address, language"
+  - id: preferences
+    systems: [crm]
+    source: REF p. 9-10
+    fr: "Vos choix de communication : lettre d'information, offres par SMS, offres de partenaires"
+    en: "Your communication choices: newsletter, SMS offers, partner offers"
+  - id: rights_requests
+    systems: [crm]
+    source: REF p. 11
+    fr: Vos demandes antérieures d'exercice de droits
+    en: Your earlier requests to exercise your rights
+  - id: orders
+    systems: [orders]
+    source: REF p. 8
+    fr: "Commandes : date, statut, articles, quantités, prix, adresse de livraison"
+    en: "Orders: date, status, items, quantities, prices, delivery address"
+  - id: customer_service
+    systems: [helpdesk]
+    source: REF p. 8
+    fr: Vos échanges avec le service client (demandes et messages)
+    en: Your exchanges with customer service (tickets and messages)
+  - id: browsing
+    systems: [weblogs]
+    source: COOKIES p. 10
+    fr: "Navigation sur le site : pages consultées, date et heure, adresse IP, navigateur, identifiant de cookie"
+    en: "Use of the website: pages viewed, date and time, IP address, browser, cookie ID"
+
+recipients:
+  - id: internal
+    source: REF p. 8
+    fr: "Nos services internes habilités : service client, logistique, comptabilité"
+    en: "Our authorised internal teams: customer service, logistics, accounting"
+  - id: processors
+    source: REF p. 8; D0010
+    fr: >-
+      Nos sous-traitants, dans la limite de leur mission : hébergeur situé dans l'Union européenne, prestataire de
+      paiement, transporteurs, prestataire d'envoi d'e-mails
+    en: >-
+      Our processors, only for their task: a hosting provider in the European Union, a payment service provider,
+      parcel carriers, an email service provider
+  - id: partners
+    source: REF p. 9
+    fr: Des partenaires commerciaux, uniquement si vous avez accepté les offres de partenaires
+    en: Commercial partners, only if you agreed to partner offers
+
+transfers:
+  source: D0010; rules in REF p. 10 and GDPR Art. 15(2)
+  fr: Nous ne transférons pas vos données en dehors de l'Espace économique européen.
+  en: We do not transfer your data outside the European Economic Area.
+
+automated_decisions:
+  source: D0010; GDPR Art. 22
+  fr: >-
+    Nous ne prenons aucune décision fondée exclusivement sur un traitement automatisé, y compris le profilage,
+    qui produirait des effets juridiques à votre égard ou vous affecterait de manière significative.
+  en: >-
+    We make no decision based solely on automated processing, including profiling, that would produce legal
+    effects concerning you or similarly significantly affect you.
+
+data_source:
+  source: GDPR Art. 15(1)(g)
+  fr: >-
+    Les données viennent de vous (votre compte, vos commandes, vos messages) ou sont produites par votre
+    utilisation de notre site (journaux de navigation).
+  en: >-
+    The data comes from you (your account, your orders, your messages) or is produced by your use of our website
+    (browsing logs).
+
+rights:
+  source: REF p. 12; GDPR Art. 15(1)(e)
+  fr: >-
+    Vous pouvez demander la rectification ou l'effacement de vos données, ou la limitation de leur traitement ;
+    vous opposer à leur traitement (à tout moment pour la prospection) ; demander la portabilité de vos données ;
+    et retirer votre consentement à tout moment. Écrivez-nous à privacy@ferlane.example.
+  en: >-
+    You can ask us to rectify or erase your data, or to restrict its processing; object to its processing (at
+    any time for marketing); ask for your data in a portable format; and withdraw your consent at any time.
+    Write to privacy@ferlane.example.
+
+complaint:
+  source: PLAINTE; GDPR Art. 15(1)(f)
+  fr: >-
+    Vous pouvez introduire une réclamation auprès de la CNIL, en ligne sur https://www.cnil.fr/fr/plaintes, ou par
+    courrier : CNIL, Service des plaintes, 3 Place de Fontenoy, 75007 Paris.
+  en: >-
+    You can lodge a complaint with the CNIL, the French data protection authority, online at
+    https://www.cnil.fr/fr/plaintes, or by post: CNIL, Service des plaintes, 3 Place de Fontenoy, 75007 Paris,
+    France.

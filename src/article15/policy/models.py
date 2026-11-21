@@ -12,6 +12,7 @@ from article15.schemas import AgentName
 
 DEFAULT_POLICY_PATH = Path(__file__).with_name("policy.yaml")
 PROMPT_ONLY = "prompt-only"
+SINGLE_AGENT_ROLES = frozenset(AgentName) - {AgentName.SINGLE, AgentName.ADVISOR}
 
 
 class Effect(StrEnum):
@@ -53,7 +54,10 @@ class Policy(BaseModel):
     rules: list[Rule] = Field(min_length=1)
 
     def for_agent(self, agent: AgentName) -> list[Rule]:
-        return [r for r in self.rules if agent in r.applies_to]
+        """The rules an agent's prompt carries. The single-agent baseline (E1) does every job except the
+        advisor's, so it carries the rules of all of them."""
+        roles = SINGLE_AGENT_ROLES if agent is AgentName.SINGLE else frozenset({agent})
+        return [r for r in self.rules if roles & set(r.applies_to)]
 
     def rule(self, rule_id: str) -> Rule:
         for r in self.rules:

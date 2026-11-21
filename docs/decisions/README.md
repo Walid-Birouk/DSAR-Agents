@@ -13,3 +13,4 @@ Short records of decisions that shape the project. Each states the choice, why i
 | [0007](0007-web-and-hosting.md) | React web app, FastAPI, one EU server with Docker Compose | accepted |
 | [0008](0008-subject-scoped-access.md) | Subject-scoped access: opaque tokens, identity evidence in code, proof of control | accepted |
 | [0009](0009-fictional-company.md) | Ferlane, a seeded fictional company with exact ground truth | accepted |
+| [0010](0010-agent-core-and-baseline.md) | Agent core, stage tools, record/replay and the single-agent baseline | accepted |

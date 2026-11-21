@@ -26,6 +26,7 @@ class AgentName(StrEnum):
     VALIDATOR = "validator"
     COORDINATOR = "coordinator"
     ADVISOR = "advisor"
+    SINGLE = "single"  # the one-agent baseline of experiment E1: does every specialist's job
 
 
 class Channel(StrEnum):
@@ -101,7 +102,12 @@ class IdentityDecision(AgentResult):
     outcome: IdentityOutcome
     subject_id: str | None = None
     evidence: list[Evidence] = Field(default_factory=list)
+    # The order number and postcode the requester wrote, when they are the evidence. Code re-checks both
+    # against the requester's own text and the orders system before any record is unlocked (decision 0008).
+    order_reference: str | None = None
+    postcode: str | None = None
     follow_up_question: str | None = None
+    rejection_reason: str | None = None
     confidence: float = Field(ge=0.0, le=1.0)
 
     @model_validator(mode="after")
@@ -110,6 +116,10 @@ class IdentityDecision(AgentResult):
             raise ValueError("VERIFIED needs a subject_id and at least one piece of evidence")
         if self.outcome is IdentityOutcome.NEEDS_MORE_INFO and not self.follow_up_question:
             raise ValueError("NEEDS_MORE_INFO needs a follow_up_question")
+        if self.outcome is IdentityOutcome.REJECTED and self.ok and not self.rejection_reason:
+            raise ValueError("REJECTED needs a rejection_reason (the requester must be told why)")
+        if (self.order_reference is None) != (self.postcode is None):
+            raise ValueError("give the order_reference and the postcode together, or neither")
         return self
 
 
@@ -163,8 +173,33 @@ class RedactionSpan(Strict):
         return self
 
 
+class SpecialCategory(StrEnum):
+    """GDPR Art. 9(1)."""
+
+    RACIAL_OR_ETHNIC_ORIGIN = "racial_or_ethnic_origin"
+    POLITICAL_OPINIONS = "political_opinions"
+    RELIGIOUS_OR_PHILOSOPHICAL_BELIEFS = "religious_or_philosophical_beliefs"
+    TRADE_UNION_MEMBERSHIP = "trade_union_membership"
+    GENETIC = "genetic"
+    BIOMETRIC = "biometric"
+    HEALTH = "health"
+    SEX_LIFE_OR_ORIENTATION = "sex_life_or_orientation"
+
+
+class SpecialCategoryFlag(Strict):
+    """Special-category data about the subject: it stays in the pack, and the reviewer must acknowledge it."""
+
+    system: System
+    record_id: str
+    field: str
+    start: int = Field(ge=0)
+    end: int = Field(gt=0)
+    category: SpecialCategory
+
+
 class RedactionPlan(AgentResult):
     spans: list[RedactionSpan]
+    special_category: list[SpecialCategoryFlag] = Field(default_factory=list)
     unresolved: list[str] = Field(default_factory=list)  # mentions the agent could not classify
 
 

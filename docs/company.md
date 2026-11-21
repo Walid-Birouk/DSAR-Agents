@@ -21,6 +21,21 @@ Each system is one SQLite database behind its own MCP server (`uv run a15 serve 
 - Search tools return references with short summaries that hold no free text or contact details. Read tools
   return full records.
 
+## Privacy register
+
+[`register.yaml`](../src/article15/company/register.yaml) is what Ferlane tells its customers about its
+processing, in French and English: purposes with their legal bases and retention periods, categories of data,
+recipients, rights, how to complain, the source of the data, automated decisions and transfers. These are
+the Article 15(1)(a)-(h) and 15(2) items every reply must give.
+
+Every entry names its source:
+- the CNIL référentiel on commercial management (purposes, legal bases, retention, recipients);
+- the CNIL cookies recommendation (web logs);
+- the CNIL complaint page.
+
+The project owner made Ferlane's own choices: no transfers outside the EEA, no automated decisions, and
+recipients named as categories. See [decision 0010](decisions/0010-agent-core-and-baseline.md).
+
 ## Built-in difficulties (PLAN.md 8.1)
 
 Counts are for seed 15.
