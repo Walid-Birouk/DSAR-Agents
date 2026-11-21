@@ -106,6 +106,7 @@ def release(session: CaseSession) -> Released:
         subject=letter.subject_line,
         body=letter.body + f"\n\n[attachment: pack.json, {len(pack_bytes(session.pack))} bytes]",
         at=session.clock(),
+        op_id=f"release:{session.case.pack_hash}",
     )
     _advance(session, S.CLOSED, "reply sent")
     return Released(session.case.case_id, session.case.pack_hash, note.message_id)

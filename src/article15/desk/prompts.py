@@ -60,6 +60,14 @@ def links_result(linked: int, not_linked: int) -> str:
     )
 
 
+def resumed(state: str) -> str:
+    return (
+        f"The case was interrupted and has been resumed. It is at {state}: the stages before it are finished "
+        f"and "
+        "recorded. Call case_get_status, then carry on from there."
+    )
+
+
 REPLY_ARRIVED = (
     "The requester has replied to your question; read the reply with notify_read_replies. The case is back "
     "at IDENTITY_CHECK: decide again with case_submit_identity."

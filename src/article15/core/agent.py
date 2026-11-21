@@ -28,6 +28,9 @@ DEFAULT_NUDGE = (
 MAX_CONSECUTIVE_NUDGES = 2
 
 
+TRACE_CONTENTS = False  # process-wide switch for Agent.trace_contents (debugging only; see below)
+
+
 class StopReason(StrEnum):
     COMPLETED = "completed"
     CAP_CALLS = "cap_calls"
@@ -126,6 +129,9 @@ class Agent:
     max_tokens: int | None = 8192
     sink: EventSink = field(default_factory=NullSink)
     nudge: str = DEFAULT_NUDGE
+    # Debugging only, never in production: put the last message's text on llm.request. Telemetry must not
+    # hold contents (PLAN.md 9); the broken version `raw_prompts_to_telemetry` turns this on.
+    trace_contents: bool = False
 
     def _tool_choice(self) -> str:
         # DeepSeek refuses "required" in thinking mode; without thinking it forces a tool call every turn.
@@ -161,6 +167,11 @@ class Agent:
                 model=self.model,
                 messages=len(messages),
                 digest=request.digest()[:16],
+                **(
+                    {"prompt": str(messages[-1].get("content", ""))[:4000]}
+                    if self.trace_contents or TRACE_CONTENTS
+                    else {}
+                ),
             )
             try:
                 response = await self.provider.complete(request)

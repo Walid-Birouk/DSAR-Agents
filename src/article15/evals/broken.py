@@ -11,6 +11,8 @@ that the expected gate or bar fails, and that the same cases are green when noth
 | lookalikes_included | the pack also takes records that only look like the subject's | foreign_records   |
 | retention_missing   | the letter leaves out the retention periods                   | art15_complete    |
 | release_guard_off   | the release guard passes anything                             | released_w/o_appr |
+| egress_filter_off   | the advisor's payload carries the sender, and nothing stops it | advisor leaks    |
+| raw_prompts_to_telemetry | prompts go on the spans, and the scrubber is off         | telemetry_leaks   |
 
 Every eval run tries to release each pack that waits for approval without one (the release probe in
 desk/runner.py), so a release guard that passes anything shows up as a release without approval. The plan's
@@ -37,6 +39,8 @@ BROKEN_VERSIONS: dict[str, str] = {
     "lookalikes_included": "foreign_records",
     "retention_missing": "art15_complete",
     "release_guard_off": "released_without_approval",
+    "egress_filter_off": "advisor_payload_leaks",
+    "raw_prompts_to_telemetry": "telemetry_leaks",
 }
 _active: set[str] = set()
 
@@ -101,6 +105,20 @@ def applied(name: str, data: DataPaths | None = None) -> Iterator[None]:
             g.name, g.rule_id, g.targets, lambda c, t, x: None
         )
         restores.append(lambda: machine.GUARDS.__setitem__("case.release_approval", g))
+    elif name == "egress_filter_off":
+        from article15.advisor import service
+
+        def leaky(summary: Any, never: Any = ()) -> str:
+            values = [v for v in never if "@" in v]
+            return str(summary.model_dump_json())[:-1] + f', "requester": "{values[0] if values else ""}"}}'
+
+        patch(service, "outgoing", leaky)
+    elif name == "raw_prompts_to_telemetry":
+        from article15.core import agent
+        from article15.telemetry.otel import Scrubber
+
+        patch(agent, "TRACE_CONTENTS", True)
+        patch(Scrubber, "clean", lambda self, value: value)
     _active.add(name)
     try:
         yield

@@ -7,6 +7,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from article15.advisor.models import Advice
 from article15.case.approvals import Approval
 from article15.case.deadlines import Deadlines, deadlines_for
 from article15.schemas import (
@@ -83,6 +84,7 @@ class Case(BaseModel):
     claims_problems: list[str] = Field(default_factory=list)  # the claims cross-check (desk/claims.py)
     approval: Approval | None = None
 
+    advice: list[Advice] = Field(default_factory=list)  # from the DPO advisor (advisory only)
     human_decision: HumanDecision | None = None
     extension_reason: str | None = None
     rejection_reason: str | None = None

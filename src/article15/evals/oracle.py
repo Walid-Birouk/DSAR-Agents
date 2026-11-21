@@ -170,12 +170,76 @@ ESCALATE_AFTER_IDENTITY = {
 }
 
 
-def oracle(truth: CaseTruth, request: RequestCase, register: Register, sender_name: str) -> Script:
+def _from_redaction(truth: CaseTruth, register: Register, chosen: list[dict[str, Any]]) -> Script:
+    """The oracle from the redaction stage on: read the tickets, redact, write the letter, validate."""
+    language = truth.language
+    tickets = [r["record_id"] for r in chosen if r["table"] == "tickets"]
+    if tickets:
+        yield [("helpdesk_read_ticket", {"ticket_id": t}) for t in tickets]
+    in_pack = {r["record_id"] for r in chosen}
+    spans = [
+        {
+            "system": s.record.system.value,
+            "record_id": s.record.record_id,
+            "field": s.field,
+            "text": s.text,
+            "category": "third_party",
+            "reason": s.note,
+        }
+        for s in truth.redactions
+        if s.category is SpanCategory.THIRD_PARTY and s.record.record_id in in_pack
+    ]
+    special = [
+        {
+            "system": m.record.system.value,
+            "record_id": m.record.record_id,
+            "field": m.field,
+            "text": m.text,
+            "category": m.category,
+        }
+        for m in truth.special_category
+        if m.record.record_id in in_pack
+    ]
+    yield [("case_submit_redaction", {"spans": spans, "special_category": special})]
+    counts: dict[str, int] = {}
+    for r in chosen:
+        counts[r["system"]] = counts.get(r["system"], 0) + 1
+    yield [
+        (
+            "case_submit_letter",
+            {
+                "ok": True,
+                "language": language.value,
+                "subject_line": "Votre demande d'accès" if language is Language.FR else "Your access request",
+                "body": _letter_body(register, language, counts, bool(spans)),
+                "items_covered": [i.value for i in Art15Item],
+                "record_count_claimed": len(chosen),
+            },
+        )
+    ]
+    yield [("case_read_pack", {})]
+    yield [("case_submit_validation", {"ok": True, "verdict": "APPROVED"})]
+
+
+def oracle(
+    truth: CaseTruth,
+    request: RequestCase,
+    register: Register,
+    sender_name: str,
+    resume_at: str | None = None,
+) -> Script:
     """A perfect single agent, reading only what its tools return, plus the truth for its judgments (who the
     subject is, what to redact, when a person must decide)."""
 
     def gen() -> Script:
         language = truth.language
+        if resume_at == "DISCOVERY_DONE":
+            # Resumed after a crash: the case is past discovery. Check the status, then go on from redaction.
+            yield [("case_get_status", {})]
+            keys = sorted((k.system.value, k.table, k.record_id) for k in truth.records)
+            chosen = [{"system": a, "table": b, "record_id": c} for a, b, c in keys]
+            yield from _from_redaction(truth, register, chosen)
+            return
         seen = yield [
             (
                 "case_submit_intake",
@@ -273,6 +337,8 @@ def oracle(truth: CaseTruth, request: RequestCase, register: Register, sender_na
             )
         ]
         if truth.kind in ESCALATE_AFTER_IDENTITY:
+            question = "possibly_excessive" if truth.kind is CaseKind.EDGE_REPEAT else "extension"
+            seen = yield [(f"advisor_{question}", {})]
             seen = yield [("case_escalate", {"reason": ESCALATE_AFTER_IDENTITY[truth.kind]})]
             return
         links_asked = False
@@ -329,54 +395,7 @@ def oracle(truth: CaseTruth, request: RequestCase, register: Register, sender_na
                 },
             )
         ]
-        tickets = [r["record_id"] for r in chosen if r["table"] == "tickets"]
-        if tickets:
-            seen = yield [("helpdesk_read_ticket", {"ticket_id": t}) for t in tickets]
-        in_pack = {r["record_id"] for r in chosen}
-        spans = [
-            {
-                "system": s.record.system.value,
-                "record_id": s.record.record_id,
-                "field": s.field,
-                "text": s.text,
-                "category": "third_party",
-                "reason": s.note,
-            }
-            for s in truth.redactions
-            if s.category is SpanCategory.THIRD_PARTY and s.record.record_id in in_pack
-        ]
-        special = [
-            {
-                "system": m.record.system.value,
-                "record_id": m.record.record_id,
-                "field": m.field,
-                "text": m.text,
-                "category": m.category,
-            }
-            for m in truth.special_category
-            if m.record.record_id in in_pack
-        ]
-        seen = yield [("case_submit_redaction", {"spans": spans, "special_category": special})]
-        counts: dict[str, int] = {}
-        for r in chosen:
-            counts[r["system"]] = counts.get(r["system"], 0) + 1
-        seen = yield [
-            (
-                "case_submit_letter",
-                {
-                    "ok": True,
-                    "language": language.value,
-                    "subject_line": "Votre demande d'accès"
-                    if language is Language.FR
-                    else "Your access request",
-                    "body": _letter_body(register, language, counts, bool(spans)),
-                    "items_covered": [i.value for i in Art15Item],
-                    "record_count_claimed": len(chosen),
-                },
-            )
-        ]
-        seen = yield [("case_read_pack", {})]
-        seen = yield [("case_submit_validation", {"ok": True, "verdict": "APPROVED"})]
+        yield from _from_redaction(truth, register, chosen)
 
     return gen()
 

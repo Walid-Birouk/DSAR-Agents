@@ -7,6 +7,7 @@ tool can tell the model which rule stopped it.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -61,6 +62,7 @@ class CaseSession:
     linked: list[str] = field(default_factory=list)
     validation_rounds: int = 0
     shadow_log: list[GuardFailure] = field(default_factory=list)
+    on_change: Callable[[CaseSession], None] | None = None  # the checkpoint hook (checkpoints.py)
 
     @property
     def state(self) -> CaseState:
@@ -107,6 +109,8 @@ class CaseSession:
             status="ok",
             policy_version=self.policy.version,
         )
+        if self.on_change is not None:
+            self.on_change(self)
         return []
 
     def can_reach(self, target: CaseState) -> bool:

@@ -1,0 +1,47 @@
+# The private observability stack (PLAN.md 9): an OpenTelemetry collector in front of Jaeger (traces) and
+# Prometheus (metrics), with Grafana on top. Every port binds to 127.0.0.1: reach the UIs through an SSH tunnel
+# or the reverse proxy's login (M7), never directly from the internet.
+#
+#   docker compose -f deploy/observability/docker-compose.yml up -d
+#   A15_OTLP_ENDPOINT=http://127.0.0.1:4318 uv run a15 eval run ...    # the desk sends its traces here
+#
+# Image tags checked on Docker Hub on 2026-11-21.
+name: a15-observability
+
+services:
+  collector:
+    image: otel/opentelemetry-collector-contrib:0.165.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "127.0.0.1:4318:4318"  # OTLP over HTTP, from the desk
+    depends_on: [jaeger]
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/jaeger:2.23.0
+    ports:
+      - "127.0.0.1:16686:16686"  # the Jaeger UI
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.16.0
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "127.0.0.1:9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.2.6
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on: [prometheus, jaeger]
+    restart: unless-stopped

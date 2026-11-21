@@ -2,8 +2,8 @@
 
 **A multi-agent desk that answers GDPR right-of-access requests, with evals, observability and policy as code.**
 
-> Status: in development (milestone M4: the seven-agent desk, proof of control, the validator's claims
-> cross-check, shadow mode for experiment E2, and the release service).
+> Status: in development (milestone M5: the DPO advisor over A2A, OpenTelemetry tracing without personal data,
+> and resilience: retries, circuit breakers, provider fallback, checkpoints and resume).
 > A public demo will follow; see [PLAN.md](PLAN.md).
 
 Anyone can ask a company for a copy of all their personal data (GDPR Article 15), and the company has one month
@@ -38,6 +38,18 @@ uv run a15 run --replay evals/cassettes/m2         # replay them offline, free; 
 
 Each case's run directory holds the case file, the pack and its letter, the transcript, the tool log and the
 trace events. Events carry no personal data.
+
+## Advisor and observability
+
+```bash
+A15_ADVISOR_KEY=... uv run a15 advisor serve --port 8700     # the DPO advisor as an A2A agent
+GRAFANA_ADMIN_PASSWORD=... docker compose -f deploy/observability/docker-compose.yml up -d
+A15_OTLP_ENDPOINT=http://127.0.0.1:4318 uv run a15 eval run --suite smoke   # traces to Jaeger (localhost:16686)
+```
+
+Every case run also writes `spans.jsonl` (one trace per case, keyed-hash IDs, scrubbed attributes) and, when
+the advisor was consulted, `advisor_payloads.jsonl`; the eval's hard gates scan both for every seeded personal
+value.
 
 ## Evals
 

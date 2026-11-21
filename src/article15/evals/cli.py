@@ -71,8 +71,8 @@ def _cmd_eval_run(args: argparse.Namespace) -> int:
 
     from article15.company.store import DataPaths, load_people, load_truths
     from article15.core.agent import Caps
+    from article15.core.live import live_provider
     from article15.core.model import Thinking
-    from article15.core.openai_compat import OpenAICompatibleProvider, ProviderConfig
     from article15.core.provider import Provider
     from article15.core.replay import RecordingProvider, ReplayProvider
     from article15.desk.runner import Desk, RunConfig
@@ -130,14 +130,7 @@ def _cmd_eval_run(args: argparse.Namespace) -> int:
 
     def live() -> Provider:
         assert settings is not None
-        return OpenAICompatibleProvider(
-            ProviderConfig(
-                name=settings.provider,
-                base_url=settings.base_url,
-                api_key=settings.api_key,
-                timeout_s=settings.timeout_s,
-            )
-        )
+        return live_provider(settings)
 
     def cassette_dir(base: Path, n: int) -> Path:
         return base if args.repeat == 1 else base / f"run-{n}"

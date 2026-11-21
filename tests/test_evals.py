@@ -303,6 +303,8 @@ def _cases_for(world: World) -> dict[str, str]:
         "lookalikes_included": lookalike,
         "retention_missing": lookalike,
         "release_guard_off": lookalike,
+        "egress_filter_off": next(t.case_id for t in truths if t.kind is CaseKind.EDGE_REPEAT),
+        "raw_prompts_to_telemetry": lookalike,
     }
 
 

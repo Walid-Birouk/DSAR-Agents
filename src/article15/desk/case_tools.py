@@ -205,6 +205,7 @@ def build_case_tools(session: CaseSession) -> list[Tool]:
                 subject=FOLLOW_UP_SUBJECT[language].format(case_id=session.case.case_id),
                 body=d.follow_up_question,
                 at=session.clock(),
+                op_id=f"follow_up:{session.follow_ups_sent + 1}",
             )
             session.follow_ups_sent += 1
             session.update(identity=d)
@@ -295,6 +296,7 @@ def build_case_tools(session: CaseSession) -> list[Tool]:
             subject=LINK_SUBJECT[language].format(case_id=session.case.case_id),
             body=LINK_BODY[language].format(addresses=", ".join(started)),
             at=session.clock(),
+            op_id=f"link_request:{','.join(started)}",
         )
         session.pending_links = started
         failures = session.advance(

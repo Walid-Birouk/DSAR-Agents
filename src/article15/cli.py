@@ -78,8 +78,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     from article15.company.store import DataPaths
     from article15.core.agent import Caps
+    from article15.core.live import live_provider
     from article15.core.model import Thinking
-    from article15.core.openai_compat import OpenAICompatibleProvider, ProviderConfig
     from article15.core.provider import Provider
     from article15.core.replay import RecordingProvider, ReplayProvider
     from article15.desk.runner import M2_CASES, RunConfig, run_many
@@ -118,14 +118,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     def provider_for(case_id: str) -> Provider:
         if replay_dir:
             return ReplayProvider(replay_dir / f"{case_id}.jsonl")
-        live = OpenAICompatibleProvider(
-            ProviderConfig(
-                name=settings.provider,
-                base_url=settings.base_url,
-                api_key=settings.api_key,
-                timeout_s=settings.timeout_s,
-            )
-        )
+        live = live_provider(settings)
         if record_dir:
             return RecordingProvider(
                 live, record_dir / f"{case_id}.jsonl", label=f"{case_id} {settings.model}"
@@ -178,6 +171,27 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return 1 if failures else 0
 
 
+def _cmd_advisor(args: argparse.Namespace) -> int:
+    import os
+
+    import uvicorn
+
+    from article15.advisor.service import build_app, rules_advice
+    from article15.settings import load_dotenv
+
+    load_dotenv()
+    key = os.environ.get("A15_ADVISOR_KEY", "")
+    if len(key) < 16:
+        print(
+            "error: set A15_ADVISOR_KEY (at least 16 characters) for the advisor's bearer key",
+            file=sys.stderr,
+        )
+        return 2
+    app = build_app(rules_advice, key, base_url=args.public_url or f"http://{args.host}:{args.port}")
+    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     from article15.company.generator import DEFAULT_SEED
     from article15.mcp_servers.registry import SERVER_NAMES
@@ -210,6 +224,11 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--out", help="run directory (default: runs/<time>-<provider>)")
     run.add_argument("--jobs", type=int, default=1, help="cases run at the same time")
     run.set_defaults(fn=_cmd_run)
+    adv = sub.add_parser("advisor", help="serve the DPO advisor over A2A (needs A15_ADVISOR_KEY)")
+    adv.add_argument("--host", default="127.0.0.1")
+    adv.add_argument("--port", type=int, default=8700)
+    adv.add_argument("--public-url", help="the URL the Agent Card advertises (default: http://host:port)")
+    adv.set_defaults(fn=_cmd_advisor)
     from article15.evals.cli import add_parser as add_eval_parser
 
     add_eval_parser(sub)

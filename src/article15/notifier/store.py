@@ -37,6 +37,7 @@ class Note(Strict):
     subject: str
     body: str
     sent_at: datetime
+    op_id: str | None = None
 
 
 _SCHEMA = """
@@ -48,8 +49,10 @@ CREATE TABLE IF NOT EXISTS messages (
     address TEXT NOT NULL,
     subject TEXT NOT NULL,
     body TEXT NOT NULL,
-    sent_at TEXT NOT NULL
+    sent_at TEXT NOT NULL,
+    op_id TEXT  -- set on outgoing messages: one operation sends at most once, even across a crash and resume
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_op ON messages (case_id, op_id);
 CREATE INDEX IF NOT EXISTS idx_messages_case ON messages (case_id, direction);
 CREATE INDEX IF NOT EXISTS idx_messages_address ON messages (address);
 """
@@ -81,12 +84,20 @@ class NotifierStore:
         subject: str,
         body: str,
         at: datetime,
+        op_id: str | None = None,
     ) -> Note:
         with self._connect() as con:
+            if op_id is not None:
+                row = con.execute(
+                    "SELECT * FROM messages WHERE case_id = ? AND op_id = ?", (case_id, op_id)
+                ).fetchone()
+                if row is not None:  # already sent by an earlier attempt: do not send twice
+                    return Note.model_validate(dict(row))
             cur = con.execute(
-                "INSERT INTO messages (case_id, direction, kind, address, subject, body, sent_at) VALUES (?, "
-                "?, ?, ?, ?, ?, ?)",
-                (case_id, direction.value, kind.value, address.lower(), subject, body, at.isoformat()),
+                "INSERT INTO messages (case_id, direction, kind, address, subject, body, sent_at, op_id) "
+                "VALUES "
+                "(?, ?, ?, ?, ?, ?, ?, ?)",
+                (case_id, direction.value, kind.value, address.lower(), subject, body, at.isoformat(), op_id),
             )
             message_id = cur.lastrowid
         assert message_id is not None
@@ -102,9 +113,16 @@ class NotifierStore:
         )
 
     def send(
-        self, case_id: str, to: str, subject: str, body: str, at: datetime, kind: Kind = Kind.MESSAGE
+        self,
+        case_id: str,
+        to: str,
+        subject: str,
+        body: str,
+        at: datetime,
+        kind: Kind = Kind.MESSAGE,
+        op_id: str | None = None,
     ) -> Note:
-        return self._insert(case_id, Direction.TO_REQUESTER, kind, to, subject, body, at)
+        return self._insert(case_id, Direction.TO_REQUESTER, kind, to, subject, body, at, op_id)
 
     def receive(self, case_id: str, sender: str, body: str, at: datetime, subject: str = "") -> Note:
         """A reply from the requester (posted by the simulated requester or the demo visitor)."""

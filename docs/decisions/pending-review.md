@@ -14,6 +14,7 @@ When a decision is confirmed, mark its record "accepted" and remove it from this
 | The single-agent baseline report on the smoke suite | the same key | M3 "done when" |
 | E1 (single vs team) and E2 (shadow vs guarded) with a real model | the same key | M4 "done when" |
 | Review of the golden 20 (`evals/golden/golden-20.md`, answers in `ratings.yaml`) | about 2 hours | trusting the eval labels; calibrating the judge |
+| Validate the collector config and bring up `deploy/observability` | the Docker daemon running | the private Jaeger/Grafana stack |
 | The public deployment (M7) | an EU server account, optionally a domain, a GitHub repository | the live demo |
 
 ## Provisional decisions
@@ -37,3 +38,15 @@ When a decision is confirmed, mark its record "accepted" and remove it from this
 | P15 | Every eval case at AWAITING_APPROVAL gets a release probe with no approval (not in shadow mode) | 0012 | test the release guard only in unit tests |
 | P16 | No entity detector for the redaction agent until Presidio arrives with M5 | 0012 | a rule-based detector now |
 | P17 | Refusal letter (Art. 12(4)) still deferred | 0012 | draft it now with the letter agent |
+| P18 | Runs use the deterministic rules advisor (free, replayable); the model advisor exists but is not the default | [0013](0013-advisor-observability-resilience.md) | the model advisor, with its own cassettes |
+| P19 | The advisor's payload is a typed summary with no free text; the egress filter also scans for emails, phones, IPs, record IDs and the case's own values | 0013 | free-text summary written by the coordinator, filtered |
+| P20 | One advisor tool per skill (4), for the coordinator and the single agent | 0013 | one generic consult tool |
+| P21 | Stage changes are events on the case span (not stage spans) | 0013 | a span per stage (fits the team, not the single agent) |
+| P22 | Rule-based scrubber (patterns plus the seeded people's values); Presidio deferred | 0013 | Presidio with a spaCy model |
+| P23 | Telemetry hash key per process unless A15_TELEMETRY_KEY is set | 0013 | a required setting |
+| P24 | Fallback DeepSeek then Mistral (its own model) when a Mistral key is set; "pause" = the case stays at its stage, resumable | 0013 | no automatic fallback for evals (mixing models skews E1-E4) |
+| P25 | Breakers per company system (tools fail fast with unavailable:) and per provider | 0013 | also breakers per tool |
+| P26 | Checkpoint after every transition; resume re-issues tokens and re-checks the identity evidence | 0013 | resume from the case store only (M6 Postgres) |
+| P27 | Case lock lease: 20 minutes | 0013 | shorter, with heartbeats |
+| P28 | Observability stack images: collector 0.165.0, Jaeger 2.23.0, Prometheus 3.16.0, Grafana 13.2.6; ports on 127.0.0.1 only | 0013 | a hosted tracing service |
+| P29 | Seventh broken version is `raw_prompts_to_telemetry` via a debug switch (`TRACE_CONTENTS`); "injection defences removed" waits for a live model | 0013 | a scripted gullible agent now |

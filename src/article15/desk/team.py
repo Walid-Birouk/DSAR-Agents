@@ -21,6 +21,7 @@ from typing import Any
 
 from pydantic import Field
 
+from article15.advisor.models import Question
 from article15.case.models import CaseState
 from article15.company.register import Register
 from article15.core.agent import Agent, Budget, Caps
@@ -61,7 +62,7 @@ TOOLS: dict[AgentName, frozenset[str]] = {
     A.VALIDATOR: frozenset({"case_read_pack", "case_submit_validation"}),
 }
 SPECIALISTS = tuple(TOOLS)
-COORDINATOR_TOOLS = frozenset({"case_get_status", "case_escalate"})
+COORDINATOR_TOOLS = frozenset({"case_get_status", "case_escalate"}) | {f"advisor_{q.value}" for q in Question}
 DESCRIPTIONS: dict[AgentName, str] = {
     A.INTAKE: "Stage 1: the intake specialist reads the request and records what it asks.",
     A.IDENTITY: "Stage 2: the identity specialist checks who is asking (it may ask the requester).",

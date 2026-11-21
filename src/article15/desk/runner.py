@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import re
 import secrets
 import shutil
@@ -31,8 +32,13 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+import httpx
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from pydantic import BaseModel, ConfigDict
 
+from article15.advisor.service import AdvisorClient, PayloadLog, rules_advice
+from article15.advisor.service import build_app as build_advisor_app
 from article15.case.models import Case, CaseState
 from article15.company.models import CaseTruth, Person, RequestCase
 from article15.company.register import Register, load_register
@@ -42,11 +48,14 @@ from article15.core.events import EventSink, JsonlSink
 from article15.core.mcp_tools import TokenHolder, connect
 from article15.core.model import Message, Thinking, canonical_json, sha256_hex
 from article15.core.provider import Provider
+from article15.core.resilience import CircuitBreaker, with_breakers
 from article15.core.tools import Tool, ToolManager
 from article15.desk import prompts, requester
+from article15.desk.advice import build_advisor_tools
 from article15.desk.case_tools import build_case_tools
+from article15.desk.checkpoints import CheckpointStore, Snapshot
 from article15.desk.clock import LINK_REPLY_DELAY, REQUESTER_REPLY_DELAY, SimClock
-from article15.desk.pack import pack_bytes
+from article15.desk.pack import fetch_records, pack_bytes
 from article15.desk.release import ReviewRefused, release
 from article15.desk.session import CaseSession, Pause
 from article15.desk.team import REPLY_ARRIVED as team_reply_message
@@ -57,10 +66,11 @@ from article15.mcp_servers.common import ServerContext
 from article15.mcp_servers.registry import SERVER_NAMES, build_named
 from article15.notifier.store import NotifierStore
 from article15.policy.models import Policy, load_policy
-from article15.schemas import AgentName
+from article15.schemas import AgentName, IdentityOutcome, System
 from article15.scope.authority import ScopeAuthority, ScopeRefused, ScopeResolver
 from article15.scope.store import ScopeStore
 from article15.settings import DEFAULT_GRANT_TTL, DEFAULT_TOOL_TIMEOUT_S
+from article15.telemetry.otel import OtelSink, Scrubber, TeeSink, case_tracing, write_spans
 
 M2_CASES = ("A15-004", "A15-017", "A15-122", "A15-045", "A15-107")
 MAX_REPLY_ROUNDS = 1  # the generator labels the identity decision after one answered follow-up
@@ -69,6 +79,8 @@ CODE = re.compile(r"(?<!\d)(\d{6})(?!\d)")
 # Only code writes to the requester (the follow-up question comes from the identity decision), so no model can
 # send anything to anyone (PLAN.md 5.2).
 WITHHELD_TOOLS = frozenset({"notify_post_message"})
+# Keyed hashes in traces: from A15_TELEMETRY_KEY when set (stable across a deployment), else per process.
+TELEMETRY_KEY = secrets.token_bytes(32)
 
 
 @dataclass(frozen=True)
@@ -88,6 +100,12 @@ class RunConfig:
     # Evals: once a pack waits for approval, try to release it without one, as an injected "human review is
     # disabled" or a bug would. The release guard must refuse; if it does not, the eval's release gate fails.
     release_probe: bool = True
+    # The DPO advisor, in-process over real A2A: "rules" (deterministic, the default: free and replayable) or
+    # "off" (tier T2: edge cases go straight to a person).
+    advisor: str = "rules"
+    # OpenTelemetry: every case is a trace, written to spans.jsonl (and to OTLP when A15_OTLP_ENDPOINT is
+    # set).
+    telemetry: bool = True
 
 
 class CaseOutcome(BaseModel):
@@ -213,6 +231,66 @@ class OpenDesk:
         self.messages.append({"role": "user", "content": self.links_message(len(linked), len(not_linked))})
 
 
+async def restore(d: OpenDesk, snap: Snapshot) -> None:
+    """Put a fresh desk back where the checkpoint left the case. Tokens are issued anew: the identity grant
+    from opening the desk, and (once identity was verified) a subject grant whose evidence code re-checks, as
+    at first. Confirmed addresses are in the scope store; fetched records are read again."""
+    s = d.session
+    d.clock.now = snap.clock
+    # A fresh identity-stage grant at the checkpoint's time (the one from opening the desk predates it).
+    d.authority.revoke_case(s.case.case_id)
+    d.holder.token = s.identity_token = d.authority.open_case(s.case.case_id, s.request.sender)
+    s.case = snap.case
+    s.follow_ups_sent, s.validation_rounds = snap.follow_ups_sent, snap.validation_rounds
+    s.pending_links, s.linked, s.pause, s.pack = (
+        list(snap.pending_links),
+        list(snap.linked),
+        snap.pause,
+        snap.pack,
+    )
+    identity = s.case.identity
+    if identity is not None and identity.outcome is IdentityOutcome.VERIFIED and identity.subject_id:
+        token = d.authority.grant_subject(
+            s.identity_token,
+            identity.subject_id,
+            s.request_text,
+            order_reference=identity.order_reference,
+            postcode=identity.postcode,
+        )
+        d.holder.token = token
+    keys = [(System(a), b, c) for a, b, c in snap.record_keys]
+    if keys:
+        s.records = await fetch_records(s.hub, keys)
+
+
+@dataclass
+class CaseTracing:
+    sink: OtelSink
+    provider: TracerProvider
+    memory: InMemorySpanExporter
+
+    def finish(self, path: Path) -> None:
+        self.sink.close()
+        self.provider.force_flush()
+        write_spans(path, self.memory.get_finished_spans())
+        self.provider.shutdown()
+
+
+def open_tracing(case_id: str, desk: Desk) -> CaseTracing:
+    extra = []
+    endpoint = os.environ.get("A15_OTLP_ENDPOINT")
+    if endpoint:
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+        extra.append(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint.rstrip("/") + "/v1/traces")))
+    provider, memory = case_tracing(extra)
+    key = os.environ.get("A15_TELEMETRY_KEY", "").encode() or TELEMETRY_KEY
+    known = [p.name for p in desk.people.values()] + [m for p in desk.people.values() for m in p.mailboxes]
+    sink = OtelSink(provider.get_tracer("article15"), case_id, key, Scrubber.with_values(known))
+    return CaseTracing(sink, provider, memory)
+
+
 def release_probe(session: CaseSession) -> None:
     """Try to approve and send the pack with no approval at all. Both guards must refuse; the state stays."""
     if session.advance(CaseState.APPROVED, "release probe: no approval"):
@@ -238,7 +316,9 @@ async def open_desk(
         tool_timeout_s=cfg.tool_timeout_s,
     )
     servers = {name: build_named(name, ctx, notifier) for name in SERVER_NAMES}
-    sink = JsonlSink(run_dir / "events.jsonl", base={"case_id": request.case_id})
+    events = JsonlSink(run_dir / "events.jsonl", base={"case_id": request.case_id})
+    tracing = open_tracing(request.case_id, desk) if cfg.telemetry else None
+    sink: EventSink = TeeSink([events, tracing.sink]) if tracing else events
     system = prompts.system_prompt(desk.policy, desk.register)
     holder = TokenHolder(authority.open_case(request.case_id, request.sender))
     case = Case.open(request.case_id, request.received_on)
@@ -269,8 +349,18 @@ async def open_desk(
             sink=sink,
             shadow=cfg.shadow,
         )
-        hub_tools = [t for t in hub.tools if t.name not in WITHHELD_TOOLS]
-        case_tools = build_case_tools(session)
+        # Each company system's tools sit behind that system's circuit breaker (PLAN.md 10).
+        hub_tools = with_breakers([t for t in hub.tools if t.name not in WITHHELD_TOOLS], {})
+        advisor_key = secrets.token_hex(16)
+        advisor = AdvisorClient(
+            "http://advisor.internal",
+            advisor_key,
+            transport=httpx.ASGITransport(app=build_advisor_app(rules_advice, advisor_key)),
+            log=PayloadLog(path=run_dir / "advisor_payloads.jsonl"),
+        )
+        case_tools = build_case_tools(session) + build_advisor_tools(
+            session, advisor if cfg.advisor != "off" else None, CircuitBreaker("advisor")
+        )
         tools = hub_tools + case_tools
         yield OpenDesk(
             request=request,
@@ -286,6 +376,8 @@ async def open_desk(
             hub_tools=hub_tools,
             case_tools=case_tools,
         )
+    if tracing is not None:
+        tracing.finish(run_dir / "spans.jsonl")
 
 
 async def run_case(
@@ -294,14 +386,24 @@ async def run_case(
     desk: Desk,
     cfg: RunConfig,
     provider: Provider,
+    resume: bool = False,
 ) -> CaseOutcome:
+    """Run a case. With `resume`, continue it from its last checkpoint (after a crash) instead of starting
+    over: finished stages are not redone."""
     started = time.monotonic()
     run_dir = cfg.out_dir / request.case_id
-    if run_dir.exists():
+    if run_dir.exists() and not resume:
         shutil.rmtree(run_dir)
+    checkpoints = CheckpointStore(run_dir / "runtime" / "checkpoints.sqlite")
+    snapshot = checkpoints.latest(request.case_id) if resume else None
+    if resume and snapshot is None:
+        raise ValueError(f"no checkpoint to resume {request.case_id} from in {run_dir}")
     budget = Budget(caps=cfg.caps)
     async with open_desk(request, desk, cfg, run_dir) as d:
         session = d.session
+        if snapshot is not None:
+            await restore(d, snapshot)
+        session.on_change = checkpoints.save
         if cfg.arm == "team":
             team = build_team(
                 session=session,
@@ -339,6 +441,8 @@ async def run_case(
             prompt_hash = prompts.prompt_hash(d.system)
         else:
             raise ValueError(f"unknown arm {cfg.arm!r}")
+        if snapshot is not None:
+            d.messages.append({"role": "user", "content": prompts.resumed(session.state.value)})
         run = await agent.run(d.messages, budget)
         rounds = link_rounds = 0
         while run.stop_reason is StopReason.COMPLETED and session.pause is Pause.AWAITING_REQUESTER and truth:

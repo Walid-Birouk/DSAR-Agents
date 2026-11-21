@@ -22,14 +22,14 @@ from article15.schemas import AgentName
 from article15.scope.authority import SCOPE_GUARDS
 
 # Guards that belong to components built in later milestones. Each moves into the registry when built.
-PLANNED_GUARDS: dict[str, str] = {
-    "a2a.egress_filter": "M5: blocks personal data in messages to the advisor",
-}
+PLANNED_GUARDS: dict[str, str] = {}
 
 
 def code_guards() -> dict[str, str]:
     """Every guard built so far, guard name -> rule ID: the case state machine plus subject scope."""
-    return {**{n: g.rule_id for n, g in registered_guards().items()}, **SCOPE_GUARDS}
+    from article15.advisor.egress import GUARD, RULE
+
+    return {**{n: g.rule_id for n, g in registered_guards().items()}, **SCOPE_GUARDS, GUARD: RULE}
 
 
 class Level(StrEnum):
