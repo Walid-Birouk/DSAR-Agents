@@ -19,13 +19,18 @@ from article15.case.machine import registered_guards
 from article15.policy.models import PROMPT_ONLY, Policy
 from article15.policy.render import render_policy_section
 from article15.schemas import AgentName
+from article15.scope.authority import SCOPE_GUARDS
 
 # Guards that belong to components built in later milestones. Each moves into the registry when built.
 PLANNED_GUARDS: dict[str, str] = {
-    "mcp.subject_scope": "M1: MCP servers only return records of the case's verified subject",
     "pack.electronic_format": "M4: pack assembled as PDF + JSON for electronic requests",
     "a2a.egress_filter": "M5: blocks personal data in messages to the advisor",
 }
+
+
+def code_guards() -> dict[str, str]:
+    """Every guard built so far, guard name -> rule ID: the case state machine plus subject scope."""
+    return {**{n: g.rule_id for n, g in registered_guards().items()}, **SCOPE_GUARDS}
 
 
 class Level(StrEnum):
@@ -45,7 +50,7 @@ class LintIssue:
 
 def lint(policy: Policy, guards: dict[str, str] | None = None) -> list[LintIssue]:
     """`guards` maps guard name -> rule ID; defaults to the guards registered in the code."""
-    registry = guards if guards is not None else {n: g.rule_id for n, g in registered_guards().items()}
+    registry = guards if guards is not None else code_guards()
     issues: list[LintIssue] = []
     rule_ids = [r.id for r in policy.rules]
 

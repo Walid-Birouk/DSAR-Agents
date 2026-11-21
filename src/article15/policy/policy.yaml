@@ -49,7 +49,7 @@ rules:
     action: verify_identity
     effect: required
     applies_to: [identity, coordinator]
-    enforced_by: [case.identity_verified]
+    enforced_by: [case.identity_verified, scope.identity_evidence]
     text: >-
       Verify the requester against what the company already knows: a request from the registered email, or
       answers to non-intrusive questions such as a recent order number. Ask for more only when there are

@@ -11,3 +11,5 @@ Short records of decisions that shape the project. Each states the choice, why i
 | [0005](0005-policy-as-code.md) | One policy file drives prompts and code guards | accepted |
 | [0006](0006-state-machine.md) | Case lifecycle as a state machine in code | accepted |
 | [0007](0007-web-and-hosting.md) | React web app, FastAPI, one EU server with Docker Compose | accepted |
+| [0008](0008-subject-scoped-access.md) | Subject-scoped access: opaque tokens, identity evidence in code, proof of control | accepted |
+| [0009](0009-fictional-company.md) | Ferlane, a seeded fictional company with exact ground truth | accepted |

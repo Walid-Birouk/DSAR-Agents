@@ -86,11 +86,21 @@ def test_catches_orphan_guard(policy: Policy) -> None:
 
 
 def test_catches_guard_mapped_to_wrong_rule(policy: Policy) -> None:
-    from article15.case.machine import registered_guards
+    from article15.policy.lint import code_guards
 
-    guards = {n: g.rule_id for n, g in registered_guards().items()}
-    guards["case.release_approval"] = "R-DEADLINE"
-    assert any("registered for R-DEADLINE" in e for e in errors(policy, guards))
+    for name in ("case.release_approval", "mcp.subject_scope"):
+        guards = code_guards()
+        guards[name] = "R-DEADLINE"
+        assert any(f"guard {name} is registered for R-DEADLINE" in e for e in errors(policy, guards))
+
+
+def test_scope_guards_are_registered(policy: Policy) -> None:
+    from article15.policy.lint import code_guards
+
+    guards = code_guards()
+    assert guards["mcp.subject_scope"] == "R-NO-FOREIGN-DATA"
+    assert guards["scope.identity_evidence"] == "R-IDENTITY"
+    assert errors(policy, guards) == []
 
 
 def test_catches_prompt_only_mixed_with_guard(policy: Policy) -> None:
@@ -100,7 +110,7 @@ def test_catches_prompt_only_mixed_with_guard(policy: Policy) -> None:
 
 def test_planned_guards_are_warnings_not_errors(policy: Policy) -> None:
     warnings = [i for i in lint(policy) if i.level is Level.WARNING]
-    assert {w.where for w in warnings} == {"R-COPY", "R-NO-FOREIGN-DATA", "R-MINIMISE-EGRESS"}
+    assert {w.where for w in warnings} == {"R-COPY", "R-MINIMISE-EGRESS"}
 
 
 def test_rule_validation_rejects_blank_text() -> None:
