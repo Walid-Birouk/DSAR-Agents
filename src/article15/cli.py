@@ -210,6 +210,9 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--out", help="run directory (default: runs/<time>-<provider>)")
     run.add_argument("--jobs", type=int, default=1, help="cases run at the same time")
     run.set_defaults(fn=_cmd_run)
+    from article15.evals.cli import add_parser as add_eval_parser
+
+    add_eval_parser(sub)
     args = parser.parse_args(argv)
     result: int = args.fn(args)
     return result

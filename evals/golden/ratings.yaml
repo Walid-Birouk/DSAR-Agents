@@ -1,0 +1,143 @@
+# Ratings for the golden 20 (see golden-20.md). labels_ok: true / false; notes: what is wrong.
+# letter: your 1-5 scores for the letter of a live run, to check the LLM judge (filled in later).
+cases:
+  A15-002:
+    labels_ok: null
+    letter:
+      accuracy: null
+      clarity: null
+      tone: null
+    notes: ''
+  A15-004:
+    labels_ok: null
+    letter:
+      accuracy: null
+      clarity: null
+      tone: null
+    notes: ''
+  A15-009:
+    labels_ok: null
+    letter:
+      accuracy: null
+      clarity: null
+      tone: null
+    notes: ''
+  A15-011:
+    labels_ok: null
+    letter:
+      accuracy: null
+      clarity: null
+      tone: null
+    notes: ''
+  A15-019:
+    labels_ok: null
+    letter:
+      accuracy: null
+      clarity: null
+      tone: null
+    notes: ''
+  A15-027:
+    labels_ok: null
+    letter:
+      accuracy: null
+      clarity: null
+      tone: null
+    notes: ''
+  A15-047:
+    labels_ok: null
+    letter:
+      accuracy: null
+      clarity: null
+      tone: null
+    notes: ''
+  A15-048:
+    labels_ok: null
+    letter:
+      accuracy: null
+      clarity: null
+      tone: null
+    notes: ''
+  A15-054:
+    labels_ok: null
+    letter:
+      accuracy: null
+      clarity: null
+      tone: null
+    notes: ''
+  A15-060:
+    labels_ok: null
+    letter:
+      accuracy: null
+      clarity: null
+      tone: null
+    notes: ''
+  A15-072:
+    labels_ok: null
+    letter:
+      accuracy: null
+      clarity: null
+      tone: null
+    notes: ''
+  A15-073:
+    labels_ok: null
+    letter:
+      accuracy: null
+      clarity: null
+      tone: null
+    notes: ''
+  A15-079:
+    labels_ok: null
+    letter:
+      accuracy: null
+      clarity: null
+      tone: null
+    notes: ''
+  A15-093:
+    labels_ok: null
+    letter:
+      accuracy: null
+      clarity: null
+      tone: null
+    notes: ''
+  A15-105:
+    labels_ok: null
+    letter:
+      accuracy: null
+      clarity: null
+      tone: null
+    notes: ''
+  A15-113:
+    labels_ok: null
+    letter:
+      accuracy: null
+      clarity: null
+      tone: null
+    notes: ''
+  A15-115:
+    labels_ok: null
+    letter:
+      accuracy: null
+      clarity: null
+      tone: null
+    notes: ''
+  A15-135:
+    labels_ok: null
+    letter:
+      accuracy: null
+      clarity: null
+      tone: null
+    notes: ''
+  A15-146:
+    labels_ok: null
+    letter:
+      accuracy: null
+      clarity: null
+      tone: null
+    notes: ''
+  A15-158:
+    labels_ok: null
+    letter:
+      accuracy: null
+      clarity: null
+      tone: null
+    notes: ''

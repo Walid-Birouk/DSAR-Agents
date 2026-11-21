@@ -1,0 +1,140 @@
+"""The golden 20: the cases the project owner checks by hand (PLAN.md 8.1).
+
+The generator writes its own labels, so a person must confirm that they are right before the eval numbers
+mean anything. `a15 eval golden` writes a review sheet with everything a reviewer needs for each golden case
+(the request as received, what the truth says should happen, the records, the redactions, the special-category
+mentions) and a ratings file to fill in:
+
+    evals/golden/golden-20.md     the review sheet (fictional data only)
+    evals/golden/ratings.yaml     per case: are the labels right, notes, and later the letter scores that
+                                  calibrate the LLM judge (judge.py `agreement`)
+
+The ratings file is never overwritten: a reviewer's answers are kept when the sheet is regenerated.
+"""
+
+from __future__ import annotations
+
+from collections import Counter
+from pathlib import Path
+
+import yaml
+
+from article15.company.models import CaseTruth, RequestCase
+from article15.company.store import DataPaths, load_cases, load_truths
+
+GOLDEN_DIR = Path("evals/golden")
+QUESTIONS = (
+    "Is the expected resolution right for this request?",
+    "Is the identity outcome right (first on the request as received, then after the follow-up)?",
+    "Do the listed records belong to the subject, and is anything of theirs missing?",
+    "Is every listed redaction someone else's personal data, and is nothing missing?",
+    "Is the due date right?",
+)
+
+
+def _record_summary(truth: CaseTruth) -> str:
+    counts = Counter(f"{k.system.value}/{k.table}" for k in truth.records)
+    return ", ".join(f"{k} {n}" for k, n in sorted(counts.items())) or "none"
+
+
+def _case_section(request: RequestCase, truth: CaseTruth) -> list[str]:
+    r = truth.requester
+    genuine = r.person_id == truth.subject_id
+    lines = [
+        f"## {truth.case_id} ({truth.kind.value}, {truth.split.value} split)",
+        "",
+        f"- **Received:** {request.received_on} by {request.channel.value} from `{request.sender}`",
+        f"- **Language:** {truth.language.value}; request types: "
+        + ", ".join(t.value for t in truth.request_types),
+        f"- **Difficulties:** {', '.join(truth.difficulties) or 'none'}",
+        "",
+        "**Request as received**",
+        "",
+        "```text",
+        f"Subject: {request.subject_line}",
+        "",
+        request.text,
+        "```",
+        "",
+        "**What the truth says**",
+        "",
+        f"- Subject (customer): {truth.subject_id or 'none'}; the requester is "
+        + ("the subject" if genuine else f"someone else ({r.person_id})")
+        + (", with a mandate" if r.has_mandate else "")
+        + f"; knows an order number: {'yes' if r.knows_order_reference else 'no'}"
+        + f", knows its postcode: {'yes' if r.knows_postcode else 'no'}",
+        f"- Identity: {truth.expected_identity.value} on the request as received, "
+        f"{truth.expected_final_identity.value} after any follow-up",
+        f"- Resolution: {truth.expected_resolution.value}"
+        + (f" (edge case: {truth.edge_reason})" if truth.edge_reason else ""),
+        f"- Due date: {truth.due}",
+        f"- Records in the pack ({len(truth.records)}): {_record_summary(truth)}",
+        f"- Look-alike records to leave out: {len(truth.lookalikes)}",
+        f"- Addresses needing proof of control: {', '.join(truth.links_needing_proof) or 'none'}",
+        f"- Embedded instructions in the request: {'yes' if truth.embedded_instructions else 'no'}",
+    ]
+    if truth.redactions:
+        lines += [
+            "",
+            "**Other people's data in the records**",
+            "",
+            "| Record | Field | Text | Category | Why |",
+        ]
+        lines.append("|---|---|---|---|---|")
+        for s in truth.redactions:
+            text = s.text.replace("|", "\\|")
+            lines.append(
+                f"| {s.record.system.value}/{s.record.record_id} | {s.field} | {text} | {s.category.value} | "
+                f"{s.note} |"
+            )
+    if truth.special_category:
+        lines += ["", "**Special-category mentions (kept, flagged for the reviewer)**", ""]
+        lines += [
+            f'- {m.record.system.value}/{m.record.record_id} {m.field}: "{m.text}" ({m.category})'
+            for m in truth.special_category
+        ]
+    lines += ["", "**Your check:** answer in `ratings.yaml` under this case.", ""]
+    return lines
+
+
+def write_golden(data: DataPaths, out_dir: Path = GOLDEN_DIR) -> tuple[Path, Path]:
+    requests = {c.case_id: c for c in load_cases(data)}
+    golden = sorted((t for t in load_truths(data) if t.golden), key=lambda t: t.case_id)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# The golden 20: review sheet",
+        "",
+        "The generator labels every case itself. These 20 cases are checked by a person, so that the eval",
+        "results can be trusted (PLAN.md 8.1). All data is fictional (Ferlane, `.example` addresses, fiction",
+        "phone ranges). Generated by `a15 eval golden`.",
+        "",
+        "For each case, answer these in `ratings.yaml`:",
+        "",
+        *[f"{i}. {q}" for i, q in enumerate(QUESTIONS, 1)],
+        "",
+        "Set `labels_ok: true` when all five answers are yes; otherwise `false`, with a note saying what is",
+        "wrong.",
+        "",
+    ]
+    for t in golden:
+        lines += _case_section(requests[t.case_id], t)
+    sheet = out_dir / "golden-20.md"
+    sheet.write_text("\n".join(lines), encoding="utf-8", newline="\n")
+    ratings = out_dir / "ratings.yaml"
+    existing = yaml.safe_load(ratings.read_text(encoding="utf-8")) if ratings.exists() else None
+    cases = dict((existing or {}).get("cases", {}))
+    for t in golden:
+        cases.setdefault(
+            t.case_id,
+            {"labels_ok": None, "notes": "", "letter": {"clarity": None, "accuracy": None, "tone": None}},
+        )
+    header = (
+        "# Ratings for the golden 20 (see golden-20.md). labels_ok: true / false; notes: what is wrong.\n"
+        "# letter: your 1-5 scores for the letter of a live run, to check the LLM judge (filled in later).\n"
+    )
+    ratings.write_text(
+        header + yaml.safe_dump({"cases": cases}, sort_keys=True, allow_unicode=True),
+        encoding="utf-8",
+        newline="\n",
+    )
+    return sheet, ratings

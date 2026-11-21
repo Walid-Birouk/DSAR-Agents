@@ -25,6 +25,14 @@ jobs:
         run: uv run pytest
       - name: Policy lint (rules vs code guards)
         run: uv run a15 policy-lint
+      - name: Replay smoke (recorded live runs, free; fails if any replay differs)
+        run: |
+          if [ -d evals/cassettes/smoke ]; then
+            uv run a15 generate
+            uv run a15 eval run --suite smoke --agent replay --replay evals/cassettes/smoke --fail-on replay --out runs/ci-replay-smoke
+          else
+            echo "no smoke recordings yet (evals/cassettes/smoke); skipped"
+          fi
 
   secrets:
     runs-on: ubuntu-latest

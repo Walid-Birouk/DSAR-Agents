@@ -2,7 +2,8 @@
 
 **A multi-agent desk that answers GDPR right-of-access requests, with evals, observability and policy as code.**
 
-> Status: in development (milestone M2: the agent core and a single-agent baseline that runs a case end to end).
+> Status: in development (milestone M3: the eval harness: suites, exact graders, an LLM judge, reports and broken
+> versions that prove each check can fail).
 > A public demo will follow; see [PLAN.md](PLAN.md).
 
 Anyone can ask a company for a copy of all their personal data (GDPR Article 15), and the company has one month
@@ -37,6 +38,23 @@ uv run a15 run --replay evals/cassettes/m2         # replay them offline, free; 
 
 Each case's run directory holds the case file, the pack and its letter, the transcript, the tool log and the
 trace events. Events carry no personal data.
+
+## Evals
+
+Every case is graded against the generator's ground truth with exact checks (PLAN.md 8); only the letter's
+quality uses an LLM judge. Reports come as Markdown and JSON, with hard gates, bars and a baseline comparison.
+
+```bash
+uv run a15 eval run --suite smoke                    # the oracle agent: free; checks the desk and the graders
+uv run a15 eval run --suite smoke --agent live --record evals/cassettes/smoke --budget 1.00
+uv run a15 eval run --suite smoke --agent replay --replay evals/cassettes/smoke   # free, exact
+uv run a15 eval run --suite smoke --broken redaction_off                         # must come out red
+uv run a15 eval report runs/eval/<run>/report.json --baseline <baseline>/report.json
+uv run a15 eval golden                               # the golden-20 review sheet (evals/golden/)
+```
+
+Suites: `smoke` (20 dev cases, every kind), `dev`, `test`, `full` (160), `golden` (20). The runner is parallel
+(`--jobs`), resumable (`--resume`) and budget-capped (`--budget`: a case starts only if its cap still fits).
 
 The fictional shop, its built-in difficulties and how the test cases are labelled are described in
 [docs/company.md](docs/company.md). How the servers keep each case to one verified person is in
