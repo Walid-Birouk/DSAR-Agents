@@ -36,6 +36,10 @@ def add_parser(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-ar
     run.add_argument("--judge", action="store_true", help="score each letter with the LLM judge")
     run.add_argument("--baseline", metavar="REPORT", help="compare with this report.json")
     run.add_argument("--broken", choices=sorted(BROKEN_VERSIONS), help="run a deliberately broken desk")
+    run.add_argument("--arm", choices=["single", "team"], default="single", help="E1: one agent or seven")
+    run.add_argument(
+        "--shadow", action="store_true", help="E2: guards log what they would block, and let it pass"
+    )
     run.add_argument(
         "--fail-on",
         choices=["red", "replay", "never"],
@@ -48,6 +52,12 @@ def add_parser(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-ar
     rep.add_argument("report", help="report.json")
     rep.add_argument("--baseline", metavar="REPORT")
     rep.set_defaults(fn=_cmd_eval_report)
+    exp = evsub.add_parser("experiment", help="compare two reports for an experiment (E1-E4)")
+    exp.add_argument("experiment", help="E1, E2, E3 or E4")
+    exp.add_argument("a", help="report.json of arm A")
+    exp.add_argument("b", help="report.json of arm B")
+    exp.add_argument("--out", help="write the Markdown here (default: print it)")
+    exp.set_defaults(fn=_cmd_eval_experiment)
     gold = evsub.add_parser("golden", help="write the golden-20 review sheet and ratings file")
     gold.add_argument("--data", default="data/generated")
     gold.add_argument("--out", default="evals/golden")
@@ -164,7 +174,8 @@ def _cmd_eval_run(args: argparse.Namespace) -> int:
 
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     agent_name = "oracle" if settings is None else f"{args.agent}-{settings.provider}"
-    name = f"{stamp}-{args.suite}-{agent_name}" + (f"-broken-{args.broken}" if args.broken else "")
+    name = f"{stamp}-{args.suite}-{args.arm}-{agent_name}" + (f"-broken-{args.broken}" if args.broken else "")
+    name += "-shadow" if args.shadow else ""
     out = Path(args.out) if args.out else Path("runs") / "eval" / name
     model_id = settings.model if settings else "oracle"
     caps = (
@@ -186,6 +197,8 @@ def _cmd_eval_run(args: argparse.Namespace) -> int:
         max_output_tokens=int(str(max_output))
         if replay_dir and max_output is not None
         else (settings.max_output_tokens if settings else 8192),
+        arm=args.arm,
+        shadow=args.shadow,
     )
     cfg = EvalConfig(
         name=name if not args.out else out.name,
@@ -200,7 +213,7 @@ def _cmd_eval_run(args: argparse.Namespace) -> int:
         broken=args.broken,
         expected_fingerprints=expected,
     )
-    chosen = oracle_provider_for(data, desk) if args.agent == "oracle" else provider_for
+    chosen = oracle_provider_for(data, desk, args.arm) if args.agent == "oracle" else provider_for
     print(f"eval {cfg.suite}: {len(case_ids)} case(s), agent {agent_name} ({model_id}) -> {out}")
     try:
         result = anyio.run(lambda: run_eval(cfg, chosen, judge))
@@ -253,4 +266,19 @@ def _cmd_eval_golden(args: argparse.Namespace) -> int:
 
     sheet, ratings = write_golden(DataPaths(Path(args.data)), Path(args.out))
     print(f"wrote {sheet} and {ratings}")
+    return 0
+
+
+def _cmd_eval_experiment(args: argparse.Namespace) -> int:
+    from article15.evals import report as reports
+    from article15.evals.experiments import markdown
+
+    text = markdown(args.experiment, reports.load(Path(args.a)), reports.load(Path(args.b)))
+    if args.out:
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(text, encoding="utf-8", newline="\n")
+        print(f"wrote {out}")
+    else:
+        print(text)
     return 0

@@ -35,10 +35,11 @@ from article15.company.store import DataPaths, load_cases, load_people
 from article15.core.provider import Provider
 from article15.desk import prompts
 from article15.desk.runner import CaseOutcome, Desk, RunConfig, run_case
+from article15.desk.team import prompts_hash as team_prompts_hash
 from article15.evals import broken as broken_versions
 from article15.evals.graders import CaseGrade, GradingContext, grade_case
 from article15.evals.judge import JUDGE_CAPS
-from article15.evals.oracle import ScriptedProvider, oracle
+from article15.evals.oracle import ScriptedProvider, oracle, team_agents, team_script
 from article15.evals.report import Report, RunInfo, build
 
 ProviderFor = Callable[[str, int], Provider]
@@ -80,6 +81,8 @@ class EvalConfig:
             "prompt_hash": prompt_hash,
             "repeat": self.repeat,
             "broken": self.broken,
+            "arm": self.run.arm,
+            "shadow": self.run.shadow,
         }
 
 
@@ -90,16 +93,17 @@ class EvalResult:
     replay_mismatches: list[str]
 
 
-def oracle_provider_for(data: DataPaths, desk: Desk) -> ProviderFor:
+def oracle_provider_for(data: DataPaths, desk: Desk, arm: str = "single") -> ProviderFor:
     requests = {c.case_id: c for c in load_cases(data)}
     ctx_truths = GradingContext.load(data).truths
     names = {p.person_id: p.name for p in load_people(data)}
 
     def provider_for(case_id: str, run: int) -> Provider:
         truth = ctx_truths[case_id]
-        return ScriptedProvider(
-            oracle(truth, requests[case_id], desk.register, names[truth.requester.person_id])
-        )
+        script = oracle(truth, requests[case_id], desk.register, names[truth.requester.person_id])
+        if arm == "team":
+            return ScriptedProvider(team_script(script), agents=team_agents(desk.policy, desk.register))
+        return ScriptedProvider(script)
 
     return provider_for
 
@@ -119,7 +123,11 @@ async def run_eval(
     if unknown:
         raise EvalError(f"unknown case(s): {', '.join(unknown)}")
     desk = Desk.load(load_people(data))
-    prompt_hash = prompts.prompt_hash(prompts.system_prompt(desk.policy, desk.register))
+    prompt_hash = (
+        team_prompts_hash(desk.policy, desk.register)
+        if cfg.run.arm == "team"
+        else prompts.prompt_hash(prompts.system_prompt(desk.policy, desk.register))
+    )
     key = cfg.key(desk.policy.version, prompt_hash)
     manifest = root / "eval.json"
     if manifest.exists():
@@ -217,6 +225,8 @@ async def run_eval(
         repeat=cfg.repeat,
         budget_usd=cfg.budget_usd,
         broken=cfg.broken,
+        arm=cfg.run.arm,
+        shadow=cfg.run.shadow,
     )
     first = [grades[1][c] for c in cfg.case_ids if c in grades[1]]
     repeats = [[grades[n][c] for c in cfg.case_ids if c in grades[n]] for n in sorted(grades)]

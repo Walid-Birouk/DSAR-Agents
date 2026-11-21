@@ -23,7 +23,7 @@ from article15.case.models import Case, CaseState
 from article15.company.models import CaseKind, CaseTruth, Resolution, SpanCategory
 from article15.company.store import DataPaths, load_owners, load_people, load_truths, read_only
 from article15.core.model import canonical_json
-from article15.evals.checklist import check_letter
+from article15.desk.checklist import check_letter
 from article15.schemas import IdentityOutcome, System
 
 S = CaseState
@@ -110,6 +110,10 @@ class CaseGrade(BaseModel):
     stage_invalid: int
     stage_refused: int
     follow_ups: int
+    # experiment E2: what the guards refused, and (shadow mode) what they would have refused but let through
+    guard_refusals: int = 0
+    shadow_violations: int = 0
+    arm: str = "single"
     # efficiency
     model_calls: int
     input_tokens: int
@@ -428,6 +432,9 @@ def grade_case(run_dir: Path, ctx: GradingContext) -> CaseGrade:
         stage_invalid=sum(1 for e in stage if e["error_kind"] == "invalid"),
         stage_refused=sum(1 for e in stage if e["error_kind"] == "refused"),
         follow_ups=int(outcome.get("follow_ups", 0)),
+        guard_refusals=sum(1 for e in log if str(e["text"]).startswith("refused: R-")),
+        shadow_violations=len(outcome.get("guard_would_block", [])),
+        arm=str(outcome.get("arm", "single")),
         model_calls=int(totals.get("calls", 0)),
         input_tokens=int(totals.get("input_tokens", 0)),
         cache_hit_tokens=int(totals.get("cache_hit_tokens", 0)),

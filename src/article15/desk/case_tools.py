@@ -20,6 +20,7 @@ from article15.case.models import CaseState
 from article15.core.mcp_tools import McpCallError
 from article15.core.tools import FunctionTool, Tool, ToolResult, error_result
 from article15.desk import pack as packing
+from article15.desk.claims import COPY_FORMAT, check_claims
 from article15.desk.redaction import RedactionSubmission, masked_fields, resolve, verify
 from article15.desk.session import MAX_FOLLOW_UPS, MAX_VALIDATION_ROUNDS, CaseSession, Pause, refusal
 from article15.schemas import (
@@ -58,8 +59,36 @@ NEXT_STEP: dict[CaseState, str] = {
 }
 
 
+LINK_SUBJECT = {
+    Language.FR: "Votre demande d'accès {case_id} : confirmation d'une autre adresse",
+    Language.EN: "Your access request {case_id}: confirming another address",
+}
+LINK_BODY = {
+    Language.FR: (
+        "Bonjour,\nVos messages au service client mentionnent aussi l'adresse {addresses}. Pour inclure les "
+        "données liées à cette adresse, nous y avons envoyé un code de confirmation. Si cette adresse est "
+        "bien la vôtre, répondez à ce message en indiquant "
+        "le code.\nLe service protection des données de Ferlane"
+    ),
+    Language.EN: (
+        "Hello,\nYour messages to customer care also mention the address {addresses}. To include the data "
+        "linked to it, we have sent a confirmation code there. If the address is yours, reply to this "
+        "message with the code.\nFerlane's data protection desk"
+    ),
+}
+
+
 class NoArguments(Strict):
     pass
+
+
+class LinkRequest(Strict):
+    email: str = Field(description="The other email address, exactly as the customer wrote it.")
+    ticket_id: str = Field(description="The ticket whose customer message contains it.")
+
+
+class AddressLinks(Strict):
+    links: list[LinkRequest] = Field(min_length=1, max_length=3)
 
 
 class Escalation(Strict):
@@ -246,6 +275,41 @@ def build_case_tools(session: CaseSession) -> list[Tool]:
             "Next: redaction. Read every helpdesk ticket, then call case_submit_redaction."
         )
 
+    async def request_links(r: AddressLinks) -> ToolResult:
+        if session.state is not S.IDENTITY_VERIFIED:
+            return _wrong_stage(session, "case_request_address_link", S.IDENTITY_VERIFIED)
+        started: list[str] = []
+        problems: list[str] = []
+        for link in r.links:
+            try:
+                session.authority.start_link(session.hub.holder.token, link.email, link.ticket_id)
+                started.append(link.email.strip().lower())
+            except ScopeRefused as exc:
+                problems.append(f"{link.email}: {exc}")
+        if not started:
+            return error_result("refused", "R-NO-FOREIGN-DATA: " + "; ".join(problems))
+        language = session.case.intake.language if session.case.intake else Language.FR
+        session.notifier.send(
+            session.case.case_id,
+            to=session.request.sender,
+            subject=LINK_SUBJECT[language].format(case_id=session.case.case_id),
+            body=LINK_BODY[language].format(addresses=", ".join(started)),
+            at=session.clock(),
+        )
+        session.pending_links = started
+        failures = session.advance(
+            S.AWAITING_REQUESTER, f"proof of control asked for {len(started)} address(es)"
+        )
+        if failures:
+            return error_result("refused", refusal(failures))
+        skipped = f" Not sent: {'; '.join(problems)}." if problems else ""
+        return _stop(
+            f"A confirmation code was sent to {len(started)} address(es), and the requester was asked to "
+            f"send it back.{skipped} The case waits for their reply; you will be told when it arrives.",
+            session,
+            Pause.AWAITING_REQUESTER,
+        )
+
     # --- redaction ------------------------------------------------------------------------------------
 
     async def submit_redaction(sub: RedactionSubmission) -> ToolResult:
@@ -311,7 +375,12 @@ def build_case_tools(session: CaseSession) -> list[Tool]:
             plan=plan,
         )
         session.pack = pack
-        session.update(letter=d, pack_hash=packing.hash_pack(pack))
+        session.update(
+            letter=d,
+            pack_hash=packing.hash_pack(pack),
+            copy_format=COPY_FORMAT,
+            claims_problems=check_claims(d, pack),
+        )
         failures = session.advance(S.DRAFT_READY, "pack assembled")
         if failures:
             return error_result("refused", refusal(failures))
@@ -349,6 +418,12 @@ def build_case_tools(session: CaseSession) -> list[Tool]:
                 letter.body,
                 f"Redactions: {len(session.pack['redactions'])}; special-category flags: "
                 f"{len(session.pack['special_category'])}.",
+                "System checks of the letter's claims: "
+                + (
+                    "all passed."
+                    if not session.case.claims_problems
+                    else "; ".join(session.case.claims_problems)
+                ),
                 "Free text as it appears in the pack:",
                 *free_text,
             ]
@@ -407,6 +482,14 @@ def build_case_tools(session: CaseSession) -> list[Tool]:
             "true.",
             IdentityDecision,
             submit_identity,
+        ),
+        tool(
+            "case_request_address_link",
+            "Stage 3, when a helpdesk message the customer wrote gives another email address of theirs: ask "
+            "the requester to prove it is theirs. The system mails a one-time code to that address and asks "
+            "the requester to send it back; the address joins the search only if they do. Up to 3 addresses.",
+            AddressLinks,
+            request_links,
         ),
         tool(
             "case_submit_discovery",

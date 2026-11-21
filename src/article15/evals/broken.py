@@ -10,9 +10,12 @@ that the expected gate or bar fails, and that the same cases are green when noth
 | identity_skipped    | the identity step is skipped: the claimed customer is granted | impostor_accepted |
 | lookalikes_included | the pack also takes records that only look like the subject's | foreign_records   |
 | retention_missing   | the letter leaves out the retention periods                   | art15_complete    |
+| release_guard_off   | the release guard passes anything                             | released_w/o_appr |
 
-The remaining versions of the plan (release guard off, raw prompts to telemetry, injection defences removed)
-need the release service, the telemetry pipeline and a model, and come with M4 and M5.
+Every eval run tries to release each pack that waits for approval without one (the release probe in
+desk/runner.py), so a release guard that passes anything shows up as a release without approval. The plan's
+remaining versions (raw prompts to telemetry, injection defences removed) need the telemetry pipeline and a
+model, and come with M5.
 
 A version is applied for the duration of a `with applied(name, data):` block, by replacing module attributes;
 the oracle reads `is_active` for the two versions that change what an agent does.
@@ -33,6 +36,7 @@ BROKEN_VERSIONS: dict[str, str] = {
     "identity_skipped": "impostor_accepted",
     "lookalikes_included": "foreign_records",
     "retention_missing": "art15_complete",
+    "release_guard_off": "released_without_approval",
 }
 _active: set[str] = set()
 
@@ -58,6 +62,7 @@ def applied(name: str, data: DataPaths | None = None) -> Iterator[None]:
     from article15.scope.authority import ScopeAuthority
 
     patches: list[tuple[Any, str, Any]] = []
+    restores: list[Callable[[], None]] = []
 
     def patch(target: Any, attr: str, value: Any) -> None:
         patches.append((target, attr, getattr(target, attr)))
@@ -88,6 +93,14 @@ def applied(name: str, data: DataPaths | None = None) -> Iterator[None]:
             return pack
 
         patch(packing, "build_pack", build_with_lookalikes)
+    elif name == "release_guard_off":
+        from article15.case import machine
+
+        g = machine.GUARDS["case.release_approval"]
+        machine.GUARDS["case.release_approval"] = machine.Guard(
+            g.name, g.rule_id, g.targets, lambda c, t, x: None
+        )
+        restores.append(lambda: machine.GUARDS.__setitem__("case.release_approval", g))
     _active.add(name)
     try:
         yield
@@ -95,3 +108,5 @@ def applied(name: str, data: DataPaths | None = None) -> Iterator[None]:
         _active.discard(name)
         for target, attr, value in reversed(patches):
             setattr(target, attr, value)
+        for undo in restores:
+            undo()

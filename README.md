@@ -2,8 +2,8 @@
 
 **A multi-agent desk that answers GDPR right-of-access requests, with evals, observability and policy as code.**
 
-> Status: in development (milestone M3: the eval harness: suites, exact graders, an LLM judge, reports and broken
-> versions that prove each check can fail).
+> Status: in development (milestone M4: the seven-agent desk, proof of control, the validator's claims
+> cross-check, shadow mode for experiment E2, and the release service).
 > A public demo will follow; see [PLAN.md](PLAN.md).
 
 Anyone can ask a company for a copy of all their personal data (GDPR Article 15), and the company has one month
@@ -49,6 +49,9 @@ uv run a15 eval run --suite smoke                    # the oracle agent: free; c
 uv run a15 eval run --suite smoke --agent live --record evals/cassettes/smoke --budget 1.00
 uv run a15 eval run --suite smoke --agent replay --replay evals/cassettes/smoke   # free, exact
 uv run a15 eval run --suite smoke --broken redaction_off                         # must come out red
+uv run a15 eval run --suite smoke --arm team                                     # the seven-agent desk (E1)
+uv run a15 eval run --suite smoke --shadow                                       # guards only log (E2)
+uv run a15 eval experiment E1 single/report.json team/report.json                # side by side
 uv run a15 eval report runs/eval/<run>/report.json --baseline <baseline>/report.json
 uv run a15 eval golden                               # the golden-20 review sheet (evals/golden/)
 ```

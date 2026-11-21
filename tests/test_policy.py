@@ -110,7 +110,7 @@ def test_catches_prompt_only_mixed_with_guard(policy: Policy) -> None:
 
 def test_planned_guards_are_warnings_not_errors(policy: Policy) -> None:
     warnings = [i for i in lint(policy) if i.level is Level.WARNING]
-    assert {w.where for w in warnings} == {"R-COPY", "R-MINIMISE-EGRESS"}
+    assert {w.where for w in warnings} == {"R-MINIMISE-EGRESS"}
 
 
 def test_rule_validation_rejects_blank_text() -> None:

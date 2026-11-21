@@ -25,6 +25,8 @@ Turn = list[tuple[str, dict[str, Any]]] | str
 """One model turn: tool calls (name, arguments), or plain text."""
 Script = Generator[Turn, list[str], None]
 """Receives the texts the model saw since its last turn (tool results, then new user messages)."""
+TeamScript = Generator[Turn, tuple[str, list[str]], None]
+"""Receives (the agent asking, the texts it saw): one script playing every agent of a team."""
 
 PAYLOAD = re.compile(r"<untrusted_data source=\"[^\"]+\">\n(.*)\n</untrusted_data>", re.S)
 
@@ -43,17 +45,29 @@ def _seen_since_last_turn(messages: list[dict[str, Any]]) -> list[str]:
 class ScriptedProvider:
     """Plays a script turn by turn. Usage is derived from the request size, so accounting can be tested."""
 
-    def __init__(self, script: Script, name: str = "scripted", reasoning: str | None = None) -> None:
+    def __init__(
+        self,
+        script: Script | TeamScript,
+        name: str = "scripted",
+        reasoning: str | None = None,
+        agents: dict[str, str] | None = None,
+    ) -> None:
         self.script = script
         self.name = name
         self.reasoning = reasoning
+        # system prompt -> agent name: when set, the script receives (agent asking, seen) instead of seen, so
+        # one script can play every agent of a team (their calls happen one after another).
+        self.agents = agents
         self.requests: list[ModelRequest] = []
         self._started = False
         self._calls = 0
 
     async def complete(self, request: ModelRequest) -> ModelResponse:
         self.requests.append(request)
-        seen = _seen_since_last_turn(request.messages)
+        seen: Any = _seen_since_last_turn(request.messages)
+        if self.agents is not None:
+            system = str(request.messages[0].get("content", "")) if request.messages else ""
+            seen = (self.agents.get(system, "unknown"), seen)
         try:
             turn = self.script.send(seen) if self._started else next(self.script)
         except StopIteration:
@@ -261,18 +275,37 @@ def oracle(truth: CaseTruth, request: RequestCase, register: Register, sender_na
         if truth.kind in ESCALATE_AFTER_IDENTITY:
             seen = yield [("case_escalate", {"reason": ESCALATE_AFTER_IDENTITY[truth.kind]})]
             return
-        refs: list[dict[str, Any]] = []
-        seen = yield [("crm_get_customer", {}), ("orders_search", {}), ("helpdesk_search_tickets", {})]
-        for text in seen:
-            refs += payload(text)["records"]
-        offset = 0
+        links_asked = False
         while True:
-            seen = yield [("weblogs_search_events", {"offset": offset, "limit": 500})]
-            page = payload(seen[0])
-            refs += page["records"]
-            offset += len(page["records"])
-            if not page["truncated"]:
+            refs: list[dict[str, Any]] = []
+            seen = yield [("crm_get_customer", {}), ("orders_search", {}), ("helpdesk_search_tickets", {})]
+            for text in seen:
+                refs += payload(text)["records"]
+            offset = 0
+            while True:
+                seen = yield [("weblogs_search_events", {"offset": offset, "limit": 500})]
+                page = payload(seen[0])
+                refs += page["records"]
+                offset += len(page["records"])
+                if not page["truncated"]:
+                    break
+            if links_asked or not truth.links_needing_proof:
                 break
+            # Another address of the customer's appears in their own helpdesk messages: ask for proof of
+            # control (decision 0008), then search again once the requester has answered.
+            links_asked = True
+            ticket_ids = [r["record_id"] for r in refs if r["table"] == "tickets"]
+            seen = yield [("helpdesk_read_ticket", {"ticket_id": t}) for t in ticket_ids]
+            links = []
+            for address in truth.links_needing_proof:
+                for ticket_id, text in zip(ticket_ids, seen, strict=True):
+                    ticket = payload(text)
+                    if any(
+                        m["author"] == "customer" and address in m["body"].lower() for m in ticket["messages"]
+                    ):
+                        links.append({"email": address, "ticket_id": ticket_id})
+                        break
+            seen = yield [("case_request_address_link", {"links": links})]
         wanted = {(k.system.value, k.table, k.record_id) for k in truth.records}
         chosen = [r for r in refs if (r["system"], r["table"], r["record_id"]) in wanted]
         records = [
@@ -346,3 +379,82 @@ def oracle(truth: CaseTruth, request: RequestCase, register: Register, sender_na
         seen = yield [("case_submit_validation", {"ok": True, "verdict": "APPROVED"})]
 
     return gen()
+
+
+# --- the team oracle ---------------------------------------------------------------------------------------
+
+# After a successful submission of this stage tool, an ambiguous tool (one that two specialists hold) belongs
+# to the specialist of the next stage.
+NEXT_STAGE = {
+    "case_submit_intake": "identity",
+    "case_submit_identity": "discovery",
+    "case_submit_discovery": "redaction",
+    "case_submit_redaction": "letter",
+    "case_submit_letter": "validator",
+}
+
+
+STATUS_MARK = chr(10) + "STATUS:"  # the status line code appends to a specialist's answer
+
+
+def _owners() -> dict[str, set[str]]:
+    from article15.desk.team import COORDINATOR_TOOLS, TOOLS
+
+    owners: dict[str, set[str]] = {}
+    for agent, names in TOOLS.items():
+        for n in names:
+            owners.setdefault(n, set()).add(agent.value)
+    for n in COORDINATOR_TOOLS:
+        owners.setdefault(n, set()).add("coordinator")
+    return owners
+
+
+def team_script(inner: Script) -> TeamScript:
+    """Plays a single-agent script through the seven-agent team: before each move, the coordinator calls the
+    specialist that holds the move's tools. The inner script sees the same tool results as before (with the
+    coordinator's status line removed), so the single oracle drives the team unchanged."""
+    owners = _owners()
+
+    def gen() -> TeamScript:
+        try:
+            turn = next(inner)
+        except StopIteration:
+            return
+        asker, stage = "coordinator", "intake"
+        while True:
+            if isinstance(turn, str):
+                owner = asker
+            else:
+                candidates = set.intersection(*(owners.get(name, {"?"}) for name, _ in turn))
+                if asker in candidates:
+                    owner = asker
+                elif len(candidates) == 1:
+                    owner = next(iter(candidates))
+                elif stage in candidates:
+                    owner = stage
+                else:
+                    raise AssertionError(f"no single owner for {[n for n, _ in turn]}: {sorted(candidates)}")
+            if owner != asker:
+                if asker != "coordinator":
+                    raise AssertionError(f"{asker} is asking, but the next move belongs to {owner}")
+                asker, _ = yield [(f"{owner}_agent", {"note": ""})]
+                continue
+            asker, seen = yield turn
+            if not isinstance(turn, str) and asker == "coordinator" and owner != "coordinator":
+                seen = [seen[0].split(STATUS_MARK)[0], *seen[1:]] if seen else seen
+                for name, _ in turn:
+                    stage = NEXT_STAGE.get(name, stage)
+            try:
+                turn = inner.send(seen)
+            except StopIteration:
+                return
+
+    return gen()
+
+
+def team_agents(policy: Any, register: Register) -> dict[str, str]:
+    """System prompt -> agent name, for a ScriptedProvider that plays a whole team."""
+    from article15.desk.team import SPECIALISTS, system_prompt
+    from article15.schemas import AgentName
+
+    return {system_prompt(a, policy, register): a.value for a in (AgentName.COORDINATOR, *SPECIALISTS)}

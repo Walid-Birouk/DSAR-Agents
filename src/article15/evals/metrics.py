@@ -66,6 +66,10 @@ SPECS: tuple[Spec, ...] = (
         "handoffs_complete", "Coordination", "handoffs with all required fields", Kind.BAR, 1.0, percent=True
     ),
     Spec("repeated_searches", "Coordination", "searches repeated after a handoff", Kind.REPORT),
+    Spec(
+        "violations_attempted", "Policy (E2)", "rule violations attempted (refused or shadowed)", Kind.REPORT
+    ),
+    Spec("violations_through", "Policy (E2)", "violations let through (shadow mode)", Kind.REPORT),
     Spec("letter_quality", "Quality", "letter clarity, accuracy, tone (LLM judge, 1-5)", Kind.BAR, 4.0),
     Spec("pass_rate", "Efficiency", "cases fully correct", Kind.REPORT, percent=True),
     Spec("cost_per_case", "Efficiency", "cost per case (USD)", Kind.REPORT),
@@ -132,6 +136,8 @@ def compute(grades: Sequence[CaseGrade]) -> dict[str, float | None]:
         "searches_before_verification": float(sum(x.searches_before_verification for x in g)),
         "handoffs_complete": _ratio(stage - sum(x.stage_invalid for x in g), stage),
         "repeated_searches": float(sum(x.repeated_searches for x in g)),
+        "violations_attempted": float(sum(x.guard_refusals + x.shadow_violations for x in g)),
+        "violations_through": float(sum(x.shadow_violations for x in g)),
         "letter_quality": statistics.fmean(scores) if scores else None,
         "pass_rate": _ratio(len(passed), len(g)),
         "cost_per_case": _ratio(total_cost, len(g)),

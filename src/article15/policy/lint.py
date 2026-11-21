@@ -23,7 +23,6 @@ from article15.scope.authority import SCOPE_GUARDS
 
 # Guards that belong to components built in later milestones. Each moves into the registry when built.
 PLANNED_GUARDS: dict[str, str] = {
-    "pack.electronic_format": "M4: pack assembled as PDF + JSON for electronic requests",
     "a2a.egress_filter": "M5: blocks personal data in messages to the advisor",
 }
 

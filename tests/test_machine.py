@@ -64,6 +64,7 @@ def ready_case() -> Case:
             update={
                 "validation": ValidationReport(ok=True, verdict=Verdict.APPROVED),
                 "pack_hash": pack_hash(PACK),
+                "copy_format": "application/json",
             }
         ),
         S.VALIDATED,
@@ -176,3 +177,16 @@ def test_terminal_state_has_no_exits() -> None:
 
 def test_intake_channel_enums_exist() -> None:
     assert Channel.EMAIL and Language.FR  # schemas importable and stable
+
+
+def test_validated_needs_the_claims_check_and_an_electronic_copy() -> None:
+    c = ready_case()
+    m = Machine(CTX)
+    draft = next(t for t in c.history if t.to_state is S.DRAFT_READY)
+    at_draft = c.model_copy(
+        update={"state": S.DRAFT_READY, "history": c.history[: c.history.index(draft) + 1]}
+    )
+    with pytest.raises(TransitionRefused, match="R-VALIDATION: the claims cross-check found: wrong count"):
+        m.advance(at_draft.model_copy(update={"claims_problems": ["wrong count"]}), S.VALIDATED)
+    with pytest.raises(TransitionRefused, match="R-COPY"):
+        m.advance(at_draft.model_copy(update={"copy_format": "application/x-paper"}), S.VALIDATED)

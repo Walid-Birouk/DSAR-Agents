@@ -19,9 +19,9 @@ import yaml
 from article15.company.models import CaseKind, Resolution, SpanCategory, World
 from article15.company.register import load_register
 from article15.company.store import DataPaths
+from article15.desk.checklist import check_letter
 from article15.desk.runner import M2_CASES, Desk, RunConfig
 from article15.evals import broken, report, suites
-from article15.evals.checklist import check_letter
 from article15.evals.graders import GradingContext, grade_case
 from article15.evals.judge import LetterScores, agreement, judge_letter
 from article15.evals.metrics import compute, green
@@ -137,14 +137,12 @@ def test_the_oracle_passes_every_gate_and_every_case_it_can(oracle_smoke: Any, w
     assert r.metrics["resolution_accuracy"] == 1.0
     assert r.metrics["stage_order_kept"] == 1.0
     assert r.metrics["handoffs_complete"] == 1.0
+    assert r.metrics["discovery_recall"] == 1.0
+    assert r.green
     for g in r.grades:
-        # Addresses found only in free text need the proof-of-control step (decision 0008), which the desk
-        # gets in M4; until then those cases miss the records behind them, and nothing else.
-        if truths[g.case_id].links_needing_proof:
-            assert g.failures and all(f.startswith("discovery:") for f in g.failures), g.failures
-            assert g.records_extra == 0
-        else:
-            assert g.passed, (g.case_id, g.failures)
+        assert g.passed, (g.case_id, g.failures)
+    linked = [g for g in r.grades if truths[g.case_id].links_needing_proof]
+    assert linked, "the smoke suite should include a proof-of-control case"
 
 
 def test_grades_hold_no_personal_data(oracle_smoke: Any, grading: GradingContext) -> None:
@@ -304,6 +302,7 @@ def _cases_for(world: World) -> dict[str, str]:
         "identity_skipped": impostor,
         "lookalikes_included": lookalike,
         "retention_missing": lookalike,
+        "release_guard_off": lookalike,
     }
 
 

@@ -35,6 +35,8 @@ class RunInfo(BaseModel):
     repeat: int = 1
     budget_usd: float | None = None
     broken: str | None = None
+    arm: str = "single"
+    shadow: bool = False
 
 
 class Report(BaseModel):
@@ -123,7 +125,8 @@ def markdown(report: Report) -> str:
         f"- **Suite:** {r.suite} ({len(report.grades)} of {len(report.cases_planned)} cases run"
         + (f"; not run: {', '.join(report.cases_not_run)}" if report.cases_not_run else "")
         + ")",
-        f"- **Agent and model:** {r.provider} / {r.model} (thinking {r.thinking})",
+        f"- **Agent and model:** {r.provider} / {r.model} (thinking {r.thinking}); arm {r.arm}"
+        + ("; guards in shadow mode" if r.shadow else ""),
         f"- **Policy:** v{r.policy_version}; prompt hash {r.prompt_hash[:12]}",
         f"- **Started:** {r.started_at}; total model cost ${report.total_cost_usd:.4f}"
         + (f" (budget ${r.budget_usd:.2f})" if r.budget_usd is not None else ""),

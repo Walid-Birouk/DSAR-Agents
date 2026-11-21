@@ -24,8 +24,12 @@ ALLOWED: dict[CaseState, frozenset[CaseState]] = {
     S.RECEIVED: frozenset({S.INTAKE_DONE, S.NEEDS_HUMAN}),
     S.INTAKE_DONE: frozenset({S.IDENTITY_CHECK, S.NEEDS_HUMAN}),
     S.IDENTITY_CHECK: frozenset({S.IDENTITY_VERIFIED, S.AWAITING_REQUESTER, S.REJECTED, S.NEEDS_HUMAN}),
-    S.AWAITING_REQUESTER: frozenset({S.IDENTITY_CHECK, S.REJECTED, S.EXTENDED}),
-    S.IDENTITY_VERIFIED: frozenset({S.DISCOVERY_DONE, S.PARTIAL, S.NEEDS_HUMAN, S.EXTENDED}),
+    # AWAITING_REQUESTER <-> IDENTITY_VERIFIED: during discovery, the requester confirms an address found in
+    # their own messages with a one-time code (proof of control, decision 0008).
+    S.AWAITING_REQUESTER: frozenset({S.IDENTITY_CHECK, S.IDENTITY_VERIFIED, S.REJECTED, S.EXTENDED}),
+    S.IDENTITY_VERIFIED: frozenset(
+        {S.DISCOVERY_DONE, S.AWAITING_REQUESTER, S.PARTIAL, S.NEEDS_HUMAN, S.EXTENDED}
+    ),
     S.DISCOVERY_DONE: frozenset({S.REDACTION_DONE, S.NEEDS_HUMAN, S.EXTENDED}),
     S.PARTIAL: frozenset({S.IDENTITY_VERIFIED, S.NEEDS_HUMAN, S.EXTENDED}),
     S.REDACTION_DONE: frozenset({S.DRAFT_READY, S.NEEDS_HUMAN}),
@@ -138,6 +142,25 @@ def _validation(case: Case, target: CaseState, ctx: GuardContext) -> str | None:
         return "the validator has not approved the pack"
     if case.pack_hash is None:
         return "the pack has not been assembled"
+    return None
+
+
+@guard("case.claims_verified", "R-VALIDATION", S.VALIDATED)
+def _claims(case: Case, target: CaseState, ctx: GuardContext) -> str | None:
+    if case.claims_problems:
+        return "the claims cross-check found: " + "; ".join(case.claims_problems)
+    return None
+
+
+ELECTRONIC_FORMATS = frozenset({"application/json", "application/pdf"})
+
+
+@guard("pack.electronic_format", "R-COPY", S.VALIDATED)
+def _copy_format(case: Case, target: CaseState, ctx: GuardContext) -> str | None:
+    # Every channel the desk takes (web form, email) is electronic, so the copy must be in a commonly used
+    # electronic format (Art. 15(3)).
+    if case.copy_format not in ELECTRONIC_FORMATS:
+        return f"the copy must be in a commonly used electronic format, not {case.copy_format}"
     return None
 
 

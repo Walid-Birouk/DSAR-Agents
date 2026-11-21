@@ -29,7 +29,10 @@ Someone writing for another person needs that person's mandate; without one, ask
 
 3. Discovery: once identity is verified, the record tools return the verified customer's records and nobody
 else's. Call crm_get_customer, orders_search, helpdesk_search_tickets and weblogs_search_events (call it again
-with a higher offset while truncated is true). Then case_submit_discovery with every record that belongs to
+with a higher offset while truncated is true). If a message the customer wrote in one of their tickets gives
+another email address of theirs, call case_request_address_link with that address and the ticket: the system
+asks the requester to prove it is theirs and the case waits; after their answer, search again, and confirmed
+addresses are included. Then case_submit_discovery with every record that belongs to
 the customer: system, table, record_id and the reason it belongs. List what you left out, with the reason, in
 excluded_candidates. List the systems you searched; a system that failed twice goes in systems_failed.
 

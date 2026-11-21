@@ -75,7 +75,7 @@ rules:
     action: present_for_approval
     effect: required
     applies_to: [validator, coordinator]
-    enforced_by: [case.validation_approved]
+    enforced_by: [case.validation_approved, case.claims_verified]
     text: >-
       Every pack is validated before it is shown to a reviewer. Every record and every number in the letter
       must match what the tools actually returned.

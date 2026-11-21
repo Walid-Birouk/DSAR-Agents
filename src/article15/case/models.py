@@ -79,6 +79,8 @@ class Case(BaseModel):
     letter: LetterDraft | None = None
     validation: ValidationReport | None = None
     pack_hash: str | None = None
+    copy_format: str | None = None  # the media type of the copy of the data (R-COPY)
+    claims_problems: list[str] = Field(default_factory=list)  # the claims cross-check (desk/claims.py)
     approval: Approval | None = None
 
     human_decision: HumanDecision | None = None

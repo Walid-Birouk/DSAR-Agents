@@ -49,6 +49,17 @@ def case_message(request: RequestCase, due: str, extended_due: str, notice_by: s
     )
 
 
+def links_result(linked: int, not_linked: int) -> str:
+    parts = [f"The requester has replied about the other address(es): {linked} confirmed and now searchable"]
+    if not_linked:
+        parts.append(f"{not_linked} not confirmed, so they stay out of the case")
+    return (
+        "; ".join(parts)
+        + ". The case is back at IDENTITY_VERIFIED: search the four systems again, then call "
+        "case_submit_discovery."
+    )
+
+
 REPLY_ARRIVED = (
     "The requester has replied to your question; read the reply with notify_read_replies. The case is back "
     "at IDENTITY_CHECK: decide again with case_submit_identity."

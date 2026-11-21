@@ -56,6 +56,9 @@ class CaseSession:
     pack: dict[str, Any] | None = None
     pause: Pause | None = None
     follow_ups_sent: int = 0
+    # addresses whose one-time code the requester must send back (proof of control, decision 0008)
+    pending_links: list[str] = field(default_factory=list)
+    linked: list[str] = field(default_factory=list)
     validation_rounds: int = 0
     shadow_log: list[GuardFailure] = field(default_factory=list)
 

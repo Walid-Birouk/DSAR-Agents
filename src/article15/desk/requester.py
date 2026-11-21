@@ -97,3 +97,22 @@ def reply(truth: CaseTruth, people: dict[str, Person], round_: int) -> str:
         first_line, _, rest = tail.partition("\n")
         text = "\n".join([head, first_line + " " + " ".join(extra), rest])
     return text
+
+
+_LINK_CODES = {
+    Language.FR: "Bonjour,\nOui, cette adresse est bien à moi. Voici le code reçu : {codes}.\n{name}",
+    Language.EN: "Hello,\nYes, that address is mine. Here is the code I received: {codes}.\n{name}",
+}
+_LINK_UNKNOWN = {
+    Language.FR: "Bonjour,\nJe n'ai pas accès à cette adresse, je n'ai reçu aucun code.\n{name}",
+    Language.EN: "Hello,\nI have no access to that address, so I received no code.\n{name}",
+}
+
+
+def link_reply(truth: CaseTruth, people: dict[str, Person], codes: list[str]) -> str:
+    """The requester's answer when asked to send back the codes mailed to other addresses: the codes they
+    could read (only from mailboxes they control), or that they received none."""
+    name = people[truth.requester.person_id].name
+    if codes:
+        return _LINK_CODES[truth.language].format(codes=", ".join(codes), name=name)
+    return _LINK_UNKNOWN[truth.language].format(name=name)

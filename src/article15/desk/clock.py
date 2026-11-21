@@ -11,6 +11,8 @@ from datetime import UTC, date, datetime, time, timedelta
 
 CASE_START_UTC = time(8, 0)
 REQUESTER_REPLY_DELAY = timedelta(days=1)
+# A code mailed for proof of control is sent back sooner, while the case's subject grant (24 h) is valid.
+LINK_REPLY_DELAY = timedelta(hours=2)
 
 
 class SimClock:

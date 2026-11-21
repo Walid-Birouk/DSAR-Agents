@@ -95,8 +95,8 @@ settles a point; the choices the plan leaves open are marked *(open choice)*.
 
 **Given up.**
 - No baseline report for the real single agent yet: it needs the live DeepSeek runs (no API key yet).
-- On the smoke suite the oracle shows 95.8% discovery recall. Two cases (A15-008, A15-012) hold an address that
-  needs proof of control, and the desk gets that step in M4. The gap is reported, not hidden.
+- On the smoke suite the oracle first showed 95.8% discovery recall: two cases (A15-008, A15-012) hold an
+  address that needs proof of control. M4 added that step (decision 0012), and the oracle is now fully green.
 - The judge is not calibrated until the owner rates golden-20 letters from a live run.
 
 **Tested by.** `tests/test_evals.py`.
