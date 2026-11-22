@@ -32,10 +32,13 @@ replay differs. The oracle section further down proves the harness itself.
 | Latency p50 (s) | report | 22 | 23 | 25 |
 
 **What fails, and why.**
-- **Another customer's order number left readable (3 cases: A15-027, A15-036, A15-040).** The model hid the
-  other customer's name but not their order number ("a parcel from order FL-100700 addressed to [redacted]").
-  No pack was sent: each stopped at a person's approval or with a person. The redaction verifier only checks
-  the spans the model chose; nothing in code checks for identifiers the model missed.
+- **Another customer's order number left readable (3 cases: A15-027, A15-036, A15-040). Fixed by a code guard.**
+  The model hid the other customer's name but not their order number ("a parcel from order FL-100700 addressed
+  to [redacted]"). No pack was sent: each stopped at a person's approval or with a person. The redaction
+  verifier only checked the spans the model chose, so it now also refuses a submission while an order number
+  that is not one of the customer's own is still readable (`foreign_order_numbers` in `desk/redaction.py`). Re-run
+  live with the guard, all three pass with nothing leaked; the oracle stays green on all 160 cases in both arms.
+  The table above is from before the guard.
 - **Edge cases not sent to a person (5 cases: repeat requests, a possible extension).** The model prepared a pack
   for approval instead of flagging the case. The approval step still stops it, but the reviewer is not told why
   the case is special.
@@ -45,6 +48,10 @@ replay differs. The oracle section further down proves the harness itself.
   Nothing is released either way.
 - **Handoffs.** The model adds an `ok` field to the redaction form (it belongs to the identity form), or misnames
   a field; the guard refuses the submission and the model corrects it on the next call.
+
+- **Letter tone (judge).** On the re-run of A15-027 the judge scored 3.33: the letter ends by saying it was
+  prepared by an AI and awaits a person's validation, which should not be in a reply to the customer. The judge
+  also wrongly called "orders: 0 records" invented. Its scores need a person's calibration (golden ratings).
 
 **Bugs the live runs found, fixed.**
 - The claims cross-check rejected "web logs: 0 records" for a system with nothing in the copy, so correct

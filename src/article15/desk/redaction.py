@@ -8,6 +8,7 @@ case pass guard `case.redaction_verified` (rule R-OTHERS).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 
 from pydantic import Field
@@ -170,4 +171,21 @@ def verify(fields: Mapping[FieldKey, str], plan: RedactionPlan, language: Langua
         for (system, record_id, field), text in masked.items():
             if quote in text:
                 problems.append(f"'{quote}' is still readable in {system.value} {record_id} {field}")
+    return problems[:MAX_ERRORS]
+
+
+ORDER_REF = re.compile(r"\bFL-\d{6}\b")
+
+
+def foreign_order_numbers(masked: Mapping[FieldKey, str], own_orders: set[str]) -> list[str]:
+    """Identifiers the agent missed: an order number still readable in the pack that is not one of the
+    customer's own orders points to another customer, so it is their personal data (rule R-OTHERS). The
+    verifier above only checks what the agent chose to hide; this checks for what it did not."""
+    problems = []
+    for (system, record_id, field), text in sorted(masked.items()):
+        for ref in sorted(set(ORDER_REF.findall(text)) - own_orders):
+            problems.append(
+                f"order {ref} is readable in {system.value} {record_id} {field} but is not one of the "
+                "customer's orders: it points to another customer, so hide it (category third_party)"
+            )
     return problems[:MAX_ERRORS]

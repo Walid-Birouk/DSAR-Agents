@@ -14,7 +14,7 @@
     "VALIDATED",
     "AWAITING_APPROVAL"
   ],
-  "pack_hash": "208ab5d123a49fa793c65c0a42e77db89f9de7939ab28552ac99fafe485eb5f6",
+  "pack_hash": "789f5ca64ccd8ab75906295ede552568e351886f055bfaac220b4a387b34629d",
   "follow_ups": 0,
   "tool_calls": [
     "case_get_status:ok",
@@ -27,7 +27,15 @@
     "helpdesk_search_tickets:ok",
     "weblogs_search_events:ok",
     "helpdesk_read_ticket:ok",
-    "case_submit_discovery:invalid",
+    "crm_read_record:ok",
+    "crm_read_record:ok",
+    "weblogs_read_record:ok",
+    "weblogs_read_record:ok",
+    "weblogs_read_record:ok",
+    "weblogs_read_record:ok",
+    "weblogs_read_record:ok",
+    "weblogs_read_record:ok",
+    "weblogs_read_record:ok",
     "case_submit_discovery:ok",
     "case_submit_redaction:ok",
     "case_submit_letter:ok",
@@ -35,12 +43,12 @@
     "case_submit_validation:ok"
   ],
   "totals": {
-    "calls": 12,
-    "input_tokens": 143185,
-    "cache_hit_tokens": 136192,
-    "output_tokens": 5938,
+    "calls": 13,
+    "input_tokens": 154038,
+    "cache_hit_tokens": 147712,
+    "output_tokens": 4597,
     "reasoning_tokens": 0,
-    "cost_usd": 0.00502
+    "cost_usd": 0.00415
   },
   "policy_version": "1.0.0",
   "prompt_hash": "5544dfe99be6261d",
@@ -50,6 +58,6 @@
   "arm": "single",
   "shadow": false,
   "guard_would_block": [],
-  "elapsed_s": 27.88,
-  "fingerprint": "1d9dd7f93d53cc10f84696a530e8e7b787f0f285949d73c025fe3a803581c18d"
+  "elapsed_s": 25.39,
+  "fingerprint": "5c05b1a6ed9288e1da77df1bfe2dd634baa679bcd1da6cf37433c92b2d13c19c"
 }

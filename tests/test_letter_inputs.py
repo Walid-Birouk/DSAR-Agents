@@ -12,7 +12,14 @@ from hypothesis import strategies as st
 from article15.company.models import CaseKind, World
 from article15.company.register import ART15_SECTIONS, load_register
 from article15.desk.prompts import system_prompt
-from article15.desk.redaction import RedactionSubmission, find_all, mask, resolve, verify
+from article15.desk.redaction import (
+    RedactionSubmission,
+    find_all,
+    foreign_order_numbers,
+    mask,
+    resolve,
+    verify,
+)
 from article15.desk.requester import reply
 from article15.policy.models import SINGLE_AGENT_ROLES, load_policy
 from article15.policy.render import render_policy_section
@@ -162,3 +169,16 @@ def test_the_single_agent_carries_every_rule_but_the_advisors() -> None:
 def test_the_system_prompt_is_stable() -> None:
     policy, register = load_policy(), load_register()
     assert system_prompt(policy, register) == system_prompt(policy, register)
+
+
+def test_another_customers_order_number_left_readable_is_caught() -> None:
+    # Live runs hid the other customer's name but not their order number; the verifier only checked the spans
+    # the agent chose, so code now checks for order numbers that are not the customer's own.
+    key = (System.HELPDESK, "M000033", "body")
+    text = (
+        "I received a parcel from order FL-100514 addressed to [redacted: third party]. "
+        "My order FL-100200 is late."
+    )
+    problems = foreign_order_numbers({key: text}, own_orders={"FL-100200"})
+    assert len(problems) == 1 and "FL-100514" in problems[0] and "FL-100200" not in problems[0]
+    assert foreign_order_numbers({key: text.replace("FL-100514", "[redacted]")}, {"FL-100200"}) == []

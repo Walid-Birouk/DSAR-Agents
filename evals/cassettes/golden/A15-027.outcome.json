@@ -1,7 +1,7 @@
 {
   "case_id": "A15-027",
-  "final_state": "NEEDS_HUMAN",
-  "pause": "with_a_person",
+  "final_state": "AWAITING_APPROVAL",
+  "pause": "awaiting_approval",
   "stop_reason": "completed",
   "error": null,
   "states": [
@@ -11,11 +11,10 @@
     "DISCOVERY_DONE",
     "REDACTION_DONE",
     "DRAFT_READY",
-    "REDACTION_DONE",
-    "DRAFT_READY",
-    "NEEDS_HUMAN"
+    "VALIDATED",
+    "AWAITING_APPROVAL"
   ],
-  "pack_hash": "dacfd1450b2803bc7d77fdfd080c3d7387044e43c18fe05b717778812e14d05f",
+  "pack_hash": "21766a15985dd0851a96f3c7d1c971338e8a1c351f44383604080b6cfee6a65c",
   "follow_ups": 0,
   "tool_calls": [
     "case_submit_intake:ok",
@@ -41,22 +40,20 @@
     "weblogs_read_record:ok",
     "weblogs_read_record:ok",
     "case_submit_discovery:ok",
+    "case_submit_redaction:refused",
+    "case_submit_redaction:refused",
     "case_submit_redaction:ok",
-    "case_submit_letter:ok",
-    "case_read_pack:ok",
-    "case_submit_letter:refused",
-    "case_submit_validation:ok",
     "case_submit_letter:ok",
     "case_read_pack:ok",
     "case_submit_validation:ok"
   ],
   "totals": {
-    "calls": 15,
-    "input_tokens": 218654,
-    "cache_hit_tokens": 209408,
-    "output_tokens": 7561,
+    "calls": 13,
+    "input_tokens": 166805,
+    "cache_hit_tokens": 159744,
+    "output_tokens": 5145,
     "reasoning_tokens": 0,
-    "cost_usd": 0.006552
+    "cost_usd": 0.004625
   },
   "policy_version": "1.0.0",
   "prompt_hash": "5544dfe99be6261d",
@@ -66,6 +63,6 @@
   "arm": "single",
   "shadow": false,
   "guard_would_block": [],
-  "elapsed_s": 35.39,
-  "fingerprint": "6bba7ebddd010f815bffb64eedcd000f87ad5e22f84ed00b7aadad1c0b4dd248"
+  "elapsed_s": 28.86,
+  "fingerprint": "dc069750f29fea23d0d1044eca5d00da6212709d246281dbd1917c447ef85212"
 }

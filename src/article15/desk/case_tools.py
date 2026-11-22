@@ -21,7 +21,13 @@ from article15.core.mcp_tools import McpCallError
 from article15.core.tools import FunctionTool, Tool, ToolResult, error_result
 from article15.desk import pack as packing
 from article15.desk.claims import COPY_FORMAT, check_claims
-from article15.desk.redaction import RedactionSubmission, masked_fields, resolve, verify
+from article15.desk.redaction import (
+    RedactionSubmission,
+    foreign_order_numbers,
+    masked_fields,
+    resolve,
+    verify,
+)
 from article15.desk.session import MAX_FOLLOW_UPS, MAX_VALIDATION_ROUNDS, CaseSession, Pause, refusal
 from article15.schemas import (
     DiscoveryResult,
@@ -32,6 +38,7 @@ from article15.schemas import (
     LetterDraft,
     RequestType,
     Strict,
+    System,
     ValidationReport,
     Verdict,
 )
@@ -323,6 +330,10 @@ def build_case_tools(session: CaseSession) -> list[Tool]:
             return error_result("invalid", "; ".join(errors))
         language = session.case.intake.language if session.case.intake else Language.FR
         problems = verify(fields, plan, language)
+        own_orders = {
+            r.record_id for r in session.records.values() if r.system is System.ORDERS and r.table == "orders"
+        }
+        problems += foreign_order_numbers(masked_fields(fields, plan, language), own_orders)
         if problems:
             return error_result(
                 "refused",
