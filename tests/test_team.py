@@ -184,6 +184,11 @@ def test_claims_check_passes_a_true_letter_and_catches_each_false_claim() -> Non
     assert "record_count_claimed is 3" in check_claims(_letter(record_count_claimed=3), PACK)[0]
     problems = check_claims(_letter(body=_letter().body + "\nWe also hold 7 records about you."), PACK)
     assert any("states 7 records" in p for p in problems)
+    # "0 records" is true of a system with nothing in the copy, and false when every system has records
+    zero = _letter(body=_letter().body + "\nWeb logs: 0 records.")
+    assert check_claims(zero, PACK) == []
+    full = {**PACK, "record_counts": {"crm": 2, "orders": 1, "helpdesk": 1, "weblogs": 1}}
+    assert any("states 0 records" in p for p in check_claims(zero, full))
     problems = check_claims(_letter(body=_letter().body + "\nSee order FL-100999."), PACK)
     assert any("FL-100999" in p for p in problems)
     with broken.applied("retention_missing"):

@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from article15.company.models import CaseKind, World
 from article15.company.store import DataPaths
+from article15.desk.runner import RunConfig
 from article15.evals.oracle import ScriptedProvider, script_of
 from article15.web.app import create_app
 from article15.web.service import WebConfig
@@ -162,3 +163,13 @@ def test_the_audit_log_is_append_only_and_sandboxes_expire(
         assert service.cleanup() == 1
         assert not (tmp_path / "sessions").exists() or not any((tmp_path / "sessions").iterdir())
         assert c.get(f"/api/runs/{run_id}").status_code == 404
+
+
+def test_each_web_run_keys_its_proof_of_control_codes_with_a_secret(client: TestClient) -> None:
+    service = client.app.state.service  # type: ignore[attr-defined]
+    a, b = service.run_config("s", "run-a"), service.run_config("s", "run-b")
+    assert a.link_code_key != b.link_code_key
+    assert (
+        a.link_code_key == service.run_config("s", "run-a").link_code_key
+    )  # stable for a run's later actions
+    assert a.link_code_key != RunConfig(data=a.data, out_dir=a.out_dir, model="x").link_code_key

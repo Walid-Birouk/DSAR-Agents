@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
+import hmac
 import json
 import logging
 import secrets
@@ -88,6 +90,8 @@ class Visitor:
 class DeskService:
     def __init__(self, cfg: WebConfig) -> None:
         self.cfg = cfg
+        # Proof-of-control codes are keyed per run with this secret, so a visitor cannot compute one.
+        self.link_secret = secrets.token_bytes(32)
         self.store = WebStore(cfg.root / "web.sqlite")
         self.requests: dict[str, RequestCase] = {c.case_id: c for c in load_cases(cfg.data)}
         self.truths: dict[str, CaseTruth] = {t.case_id: t for t in load_truths(cfg.data)}
@@ -234,6 +238,7 @@ class DeskService:
             out_dir=self.cfg.root / "sessions" / session_id / run_id,
             model=self.cfg.live_model or "scripted",
             arm=self.cfg.arm,
+            link_code_key=hmac.new(self.link_secret, run_id.encode(), hashlib.sha256).digest(),
         )
 
     def _provider(

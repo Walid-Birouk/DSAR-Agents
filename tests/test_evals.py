@@ -263,6 +263,45 @@ def test_tampered_artifacts_turn_each_check_red(
     assert g.resolution == "stopped" and not g.resolution_ok
 
 
+def test_precision_counts_the_subjects_records_gathered_before_a_case_goes_to_a_person(
+    oracle_smoke: Any, world: World, grading: GradingContext, tmp_path: Path
+) -> None:
+    # A case that goes to a person after discovery (here, a possible extension) may have gathered the
+    # subject's records: they are the subject's, not extra. Another person's record still is.
+    _, run_dir = oracle_smoke
+    truth = next(
+        t
+        for t in world.truths
+        if t.expected_resolution is Resolution.ROUTE_TO_HUMAN and t.records and (run_dir / t.case_id).exists()
+    )
+    d = _tamper(run_dir, truth.case_id, tmp_path / "gathered")
+    case = _load(d / "case.json")
+    own = [
+        {"system": k.system.value, "table": k.table, "record_id": k.record_id, "reason": "theirs"}
+        for k in truth.records[:5]
+    ]
+    case["discovery"] = {
+        "ok": True,
+        "error": None,
+        "subject_id": truth.subject_id,
+        "records": own,
+        "identifiers_used": ["subject@example.example"],
+        "excluded_candidates": [],
+        "systems_searched": ["crm"],
+        "systems_failed": [],
+    }
+    _dump(d / "case.json", case)
+    g = grade_case(d, grading)
+    assert (g.records_found, g.records_extra, g.records_missed) == (5, 0, 0)
+
+    other = next(k for k, owner in grading.owners.items() if owner != truth.subject_id)
+    case["discovery"]["records"].append(
+        {"system": other[0], "table": other[1], "record_id": other[2], "reason": "not theirs"}
+    )
+    _dump(d / "case.json", case)
+    assert grade_case(d, grading).records_extra == 1
+
+
 def test_a_search_before_verification_breaks_the_stage_order(
     oracle_smoke: Any, world: World, grading: GradingContext, tmp_path: Path
 ) -> None:

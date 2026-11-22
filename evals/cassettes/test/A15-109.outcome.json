@@ -1,0 +1,42 @@
+{
+  "case_id": "A15-109",
+  "final_state": "AWAITING_REQUESTER",
+  "pause": "awaiting_requester",
+  "stop_reason": "completed",
+  "error": null,
+  "states": [
+    "INTAKE_DONE",
+    "IDENTITY_CHECK",
+    "AWAITING_REQUESTER",
+    "IDENTITY_CHECK",
+    "AWAITING_REQUESTER"
+  ],
+  "pack_hash": null,
+  "follow_ups": 2,
+  "tool_calls": [
+    "case_get_status:ok",
+    "case_submit_intake:ok",
+    "crm_check_identity:ok",
+    "case_submit_identity:ok",
+    "notify_read_replies:ok",
+    "case_submit_identity:ok"
+  ],
+  "totals": {
+    "calls": 6,
+    "input_tokens": 54521,
+    "cache_hit_tokens": 53248,
+    "output_tokens": 1108,
+    "reasoning_tokens": 0,
+    "cost_usd": 0.001015
+  },
+  "policy_version": "1.0.0",
+  "prompt_hash": "5544dfe99be6261d",
+  "model": "deepseek-flash",
+  "thinking": "off",
+  "max_output_tokens": 8192,
+  "arm": "single",
+  "shadow": false,
+  "guard_would_block": [],
+  "elapsed_s": 8.5,
+  "fingerprint": "1c4c4d7ec60b7bcc2947b70b1aed8eda26482e28c17af40c6aea90dfc2a03671"
+}

@@ -67,7 +67,7 @@ from article15.mcp_servers.registry import SERVER_NAMES, build_named
 from article15.notifier.store import NotifierStore
 from article15.policy.models import Policy, load_policy
 from article15.schemas import AgentName, IdentityOutcome, System
-from article15.scope.authority import ScopeAuthority, ScopeRefused, ScopeResolver
+from article15.scope.authority import ScopeAuthority, ScopeRefused, ScopeResolver, keyed_link_code
 from article15.scope.store import ScopeStore
 from article15.settings import DEFAULT_GRANT_TTL, DEFAULT_TOOL_TIMEOUT_S
 from article15.telemetry.otel import OtelSink, Scrubber, TeeSink, case_tracing, write_spans
@@ -106,6 +106,9 @@ class RunConfig:
     # OpenTelemetry: every case is a trace, written to spans.jsonl (and to OTLP when A15_OTLP_ENDPOINT is
     # set).
     telemetry: bool = True
+    # Proof-of-control codes: an HMAC of the case and the address under this key. The fixed default makes
+    # recorded runs replay; the public web app passes a fresh secret per run (`keyed_link_code`).
+    link_code_key: bytes = b"a15-recorded-runs"
 
 
 class CaseOutcome(BaseModel):
@@ -311,7 +314,15 @@ async def open_desk(
     scope_secret, approval_secret = secrets.token_bytes(32), secrets.token_bytes(32)
     store = ScopeStore(runtime / "scope.sqlite")
     notifier = NotifierStore(runtime / "notifier.sqlite")
-    authority = ScopeAuthority(cfg.data, store, notifier, scope_secret, clock, cfg.grant_ttl)
+    authority = ScopeAuthority(
+        cfg.data,
+        store,
+        notifier,
+        scope_secret,
+        clock,
+        cfg.grant_ttl,
+        link_code=keyed_link_code(cfg.link_code_key),
+    )
     ctx = ServerContext(
         paths=cfg.data,
         resolver=ScopeResolver(ScopeStore(store.path, read_only=True), scope_secret, clock),

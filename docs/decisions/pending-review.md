@@ -1,8 +1,9 @@
 # Decisions waiting for review
 
 The project owner was away from 2026-11-21 and asked for the build to go on without them. Choices the plan
-does not settle were made provisionally and are listed here, so that each can be confirmed or changed. Nothing
-was pushed, published or deployed, and no paid model call was made (there is no API key in `.env`).
+does not settle were made provisionally and are listed here, so that each can be confirmed or changed. On
+2026-11-22 the owner returned, added a DeepSeek key (USD 1.22 of credit), asked for the golden 20 to be reviewed
+with the recommended method, and for the code to be pushed to GitHub; P47-P50 come from that session.
 
 When a decision is confirmed, mark its record "accepted" and remove it from this list.
 
@@ -10,12 +11,9 @@ When a decision is confirmed, mark its record "accepted" and remove it from this
 
 | What | Needs | Unblocks |
 |---|---|---|
-| M2 live runs of the five cases, the token measurements and the re-estimated costs (PLAN.md 15.1) | `DEEPSEEK_API_KEY` in `.env` | M2 "done when"; the M3 baseline report |
-| The single-agent baseline report on the smoke suite | the same key | M3 "done when" |
-| E1 (single vs team) and E2 (shadow vs guarded) with a real model | the same key | M4 "done when" |
-| Review of the golden 20 (`evals/golden/golden-20.md`, answers in `ratings.yaml`) | about 2 hours | trusting the eval labels; calibrating the judge |
+| E1 (single vs team) and E2 (shadow vs guarded) with a real model | more DeepSeek credit (about USD 5-15) | M4 "done when" |
 | Validate the collector config and bring up `deploy/observability` | the Docker daemon running | the private Jaeger/Grafana stack |
-| The public deployment (M7): build the image, `docker compose up` on the server, HTTPS, alerts | an EU server account, a domain, a GitHub repository; the Docker daemon | the live demo |
+| The public deployment (M7): build the image, `docker compose up` on the server, HTTPS, alerts | a host (see docs/running.md, free options), a domain; the Docker daemon | the live demo |
 | Public red-team round, the 2-minute video, CV lines | the live demo; you | the launch |
 
 ## Provisional decisions
@@ -68,3 +66,7 @@ When a decision is confirmed, mark its record "accepted" and remove it from this
 | P44 | One image for web and advisor; non-root, read-only containers; Caddy 2.11.9 automatic HTTPS; image tags pinned | 0015 | a platform service (D6 alternative) |
 | P45 | Nightly online backup of the web store (sessions, runs, audit log), kept 14 days; sandboxes not backed up | 0015 | also back up sandboxes |
 | P46 | Security headers and CSP at Caddy; 64 KB request-body limit | 0015 | - |
+| P47 | "deepseek-chat" (the owner's choice) is served as `deepseek-flash` with thinking off: DeepSeek retired the `deepseek-chat` name on 2026-07-24 and mapped it to that mode; the account lists only `deepseek-flash` and `deepseek-v4-pro` | 0010 | `deepseek-v4-pro` (about 4x the price) |
+| P48 | Live eval runs use a per-case cap of USD 0.05 (`A15_CASE_MAX_COST_USD`), 10x the measured cost, so the budget reservation lets 4 cases run at once on a small budget; the app default stays 0.30 | 0011 | keep 0.30 and run one case at a time |
+| P49 | The golden 20 were reviewed on 2026-11-22 by an automated review, not by a person: every label checked against the raw tables with `scripts/golden_check.py`, the judgment calls read against the policy. 20 of 20 right; see `ratings.yaml` `review` | 0011 | a person's review (about 2 hours) |
+| P50 | Discovery precision counts the subject's records gathered before a case goes to a person (it used to expect none on any non-release case, which marked 142 of the subject's own records "extra" on A15-019); missed records still count only where a pack is due. New `a15 eval regrade` re-grades a finished run for free | 0011 | precision on release cases only |

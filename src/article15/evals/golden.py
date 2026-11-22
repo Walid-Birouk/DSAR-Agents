@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections import Counter
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -30,6 +31,14 @@ QUESTIONS = (
     "Is every listed redaction someone else's personal data, and is nothing missing?",
     "Is the due date right?",
 )
+
+
+def _with_review(existing: dict[str, Any] | None, cases: dict[str, Any]) -> dict[str, Any]:
+    """The ratings to write: the cases, and the reviewer's `review` block (who, when, how) if there is one."""
+    out: dict[str, Any] = {"cases": cases}
+    if existing and existing.get("review"):
+        out["review"] = existing["review"]
+    return out
 
 
 def _record_summary(truth: CaseTruth) -> str:
@@ -133,7 +142,7 @@ def write_golden(data: DataPaths, out_dir: Path = GOLDEN_DIR) -> tuple[Path, Pat
         "# letter: your 1-5 scores for the letter of a live run, to check the LLM judge (filled in later).\n"
     )
     ratings.write_text(
-        header + yaml.safe_dump({"cases": cases}, sort_keys=True, allow_unicode=True),
+        header + yaml.safe_dump(_with_review(existing, cases), sort_keys=True, allow_unicode=True),
         encoding="utf-8",
         newline="\n",
     )

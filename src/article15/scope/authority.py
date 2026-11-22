@@ -138,6 +138,27 @@ class ScopeResolver:
         )
 
 
+LinkCode = Callable[[str, str], str]
+"""(case ID, address) -> the one-time code sent to the address."""
+
+
+def random_link_code(case_id: str, address: str) -> str:
+    """A real deployment: a fresh random code for every challenge."""
+    return f"{secrets.randbelow(10**LINK_CODE_DIGITS):0{LINK_CODE_DIGITS}d}"
+
+
+def keyed_link_code(key: bytes) -> LinkCode:
+    """The simulated desk: the code is an HMAC of the case and the address under `key`. Recorded runs use a
+    fixed key, so the simulated requester's reply (which quotes the code) is the same on every run and the
+    recording replays; the public web app uses a fresh secret key per run, so a visitor cannot compute one."""
+
+    def code(case_id: str, address: str) -> str:
+        digest = hmac.new(key, f"link-code|{case_id}|{address}".encode(), hashlib.sha256).digest()
+        return f"{int.from_bytes(digest[:8], 'big') % 10**LINK_CODE_DIGITS:0{LINK_CODE_DIGITS}d}"
+
+    return code
+
+
 class ScopeAuthority:
     """Control plane: the only writer of the scope store."""
 
@@ -149,6 +170,7 @@ class ScopeAuthority:
         secret: bytes,
         clock: Clock = utc_now,
         grant_ttl: timedelta = DEFAULT_GRANT_TTL,
+        link_code: LinkCode | None = None,
     ) -> None:
         if store.read_only:
             raise ValueError("the authority needs a writable scope store")
@@ -158,6 +180,7 @@ class ScopeAuthority:
         self.secret = secret
         self.clock = clock
         self.grant_ttl = grant_ttl
+        self.link_code = link_code or random_link_code
         self.resolver = ScopeResolver(store, secret, clock)
 
     # --- grants ----------------------------------------------------------------------------------------
@@ -306,7 +329,7 @@ class ScopeAuthority:
             raise ScopeRefused(f"{address} is registered to another customer account; a person must decide")
         now = self.clock()
         challenge_id = secrets.token_hex(8)
-        code = f"{secrets.randbelow(10**LINK_CODE_DIGITS):0{LINK_CODE_DIGITS}d}"
+        code = self.link_code(scope.case_id, address)
         self.store.insert_challenge(
             ChallengeRow(
                 challenge_id=challenge_id,

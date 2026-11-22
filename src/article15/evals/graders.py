@@ -255,9 +255,11 @@ def grade_case(run_dir: Path, ctx: GradingContext) -> CaseGrade:
         failures.append("GATE impostor accepted: verified as a customer the requester is not")
 
     # --- discovery ----------------------------------------------------------------------------------------
+    # The truth lists the subject's records for every case where they may be gathered (release, and cases
+    # that go to a person after discovery); refusals and no-data cases list none. Precision asks whether what
+    # was gathered is the subject's, whatever the resolution; missed records count only where a pack is due.
     expected = {(k.system.value, k.table, k.record_id) for k in truth.records}
-    if truth.expected_resolution is not Resolution.RELEASE_PACK:
-        expected = set()
+    pack_due = truth.expected_resolution is Resolution.RELEASE_PACK
     pack_records: set[KeyT] = set()
     if pack is not None:
         pack_records = {(r["system"], r["table"], r["record_id"]) for r in pack["records"]}
@@ -267,8 +269,9 @@ def grade_case(run_dir: Path, ctx: GradingContext) -> CaseGrade:
     else:
         got = set()
     lookalikes = {(k.system.value, k.table, k.record_id) for k in truth.lookalikes}
-    found, missed, extra = len(got & expected), len(expected - got), len(got - expected)
-    if truth.expected_resolution is Resolution.RELEASE_PACK and (missed or extra):
+    found, extra = len(got & expected), len(got - expected)
+    missed = len(expected - got) if pack_due else 0
+    if pack_due and (missed or extra):
         failures.append(f"discovery: {missed} record(s) missed, {extra} extra")
     foreign = [k for k in pack_records if ctx.owners.get(k) != truth.subject_id]
     if foreign:

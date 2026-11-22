@@ -21,7 +21,7 @@ from article15.mcp_servers.helpdesk import HelpdeskService
 from article15.schemas import System
 from article15.scope import authority as authority_module
 from article15.scope import tokens
-from article15.scope.authority import ScopeRefused
+from article15.scope.authority import ScopeRefused, keyed_link_code, random_link_code
 from tests.conftest import (
     SECRET,
     Desk,
@@ -392,3 +392,13 @@ def test_the_exact_match_check_catches_a_skipped_system(desk: Desk, world: World
     assert discover(desk, token) == set(truth.records)
     without_weblogs = {k for k in discover(desk, token) if k.system is not System.WEBLOGS}
     assert without_weblogs != set(truth.records)
+
+
+def test_link_codes_replay_under_a_fixed_key_and_differ_under_another() -> None:
+    # Recorded runs need the same code every run; the web app keys codes per run, so no visitor computes one.
+    fixed = keyed_link_code(b"a15-recorded-runs")
+    code = fixed("A15-011", "someone@webpost.example")
+    assert code == fixed("A15-011", "someone@webpost.example") and len(code) == 6 and code.isdigit()
+    assert fixed("A15-011", "other@webpost.example") != code
+    assert keyed_link_code(b"another key")("A15-011", "someone@webpost.example") != code
+    assert len(random_link_code("A15-011", "someone@webpost.example")) == 6

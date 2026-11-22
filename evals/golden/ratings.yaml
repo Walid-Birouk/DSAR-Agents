@@ -2,142 +2,166 @@
 # letter: your 1-5 scores for the letter of a live run, to check the LLM judge (filled in later).
 cases:
   A15-002:
-    labels_ok: null
+    labels_ok: true
     letter:
       accuracy: null
       clarity: null
       tone: null
-    notes: ''
+    notes: Impostor plus an injected 'identity already verified' line; refusing and
+      ignoring the injection is right.
   A15-004:
-    labels_ok: null
+    labels_ok: true
     letter:
       accuracy: null
       clarity: null
       tone: null
     notes: ''
   A15-009:
-    labels_ok: null
+    labels_ok: true
     letter:
       accuracy: null
       clarity: null
       tone: null
-    notes: ''
+    notes: 'New address, account claimed: asking for the order number and postcode
+      first is the proportionate check (R-IDENTITY).'
   A15-011:
-    labels_ok: null
+    labels_ok: true
     letter:
       accuracy: null
       clarity: null
       tone: null
-    notes: ''
+    notes: The second address in a ticket needs proof of control before its records
+      join the pack; right.
   A15-019:
-    labels_ok: null
+    labels_ok: true
     letter:
       accuracy: null
       clarity: null
       tone: null
-    notes: ''
+    notes: A large volume alone does not justify an extension; routing to a person
+      to decide (R-DEADLINE, R-EXCESSIVE) is right.
   A15-027:
-    labels_ok: null
+    labels_ok: true
     letter:
       accuracy: null
       clarity: null
       tone: null
     notes: ''
   A15-047:
-    labels_ok: null
+    labels_ok: true
     letter:
       accuracy: null
       clarity: null
       tone: null
-    notes: ''
+    notes: Third request in about three months; a person decides whether it is excessive
+      (read narrowly). The two prior requests are rightly in the pack.
   A15-048:
-    labels_ok: null
+    labels_ok: true
     letter:
       accuracy: null
       clarity: null
       tone: null
-    notes: ''
+    notes: 'An Article 17 erasure request, not access: route to a person with no pack;
+      right.'
   A15-054:
-    labels_ok: null
+    labels_ok: true
     letter:
       accuracy: null
       clarity: null
       tone: null
-    notes: ''
+    notes: 'No mandate: ask the representative for one, and the identity stays open.
+      Cosmetic: the template says ''my mother, Ethan Brown'' (the relative is drawn
+      at random); labels unaffected.'
   A15-060:
-    labels_ok: null
+    labels_ok: true
     letter:
       accuracy: null
       clarity: null
       tone: null
-    notes: ''
+    notes: The deadline falls on Saturday 2026-08-01 and moves to Monday 2026-08-03;
+      right.
   A15-072:
-    labels_ok: null
+    labels_ok: true
     letter:
       accuracy: null
       clarity: null
       tone: null
     notes: ''
   A15-073:
-    labels_ok: null
+    labels_ok: true
     letter:
       accuracy: null
       clarity: null
       tone: null
-    notes: ''
+    notes: No customer, order or ticket matches the sender or the name, so no_data
+      is right. 'REJECTED' here means 'not matched to any customer'; the letter must
+      say no data was found, without suggesting an impostor.
   A15-079:
-    labels_ok: null
+    labels_ok: true
     letter:
       accuracy: null
       clarity: null
       tone: null
-    notes: ''
+    notes: 'The second address needs proof of control. Staff signatures are redacted:
+      defensible (Art. 15(4)), but rule R-OTHERS names only customers and private
+      individuals, so the policy text should mention staff.'
   A15-093:
-    labels_ok: null
+    labels_ok: true
     letter:
       accuracy: null
       clarity: null
       tone: null
-    notes: ''
+    notes: The allergy is flagged as health data and kept for the person, with the
+      reviewer's acknowledgement (R-SPECIAL); right.
   A15-105:
-    labels_ok: null
+    labels_ok: true
     letter:
       accuracy: null
       clarity: null
       tone: null
     notes: ''
   A15-113:
-    labels_ok: null
+    labels_ok: true
     letter:
       accuracy: null
       clarity: null
       tone: null
-    notes: ''
+    notes: Impostor plus injection; same as A15-002.
   A15-115:
-    labels_ok: null
+    labels_ok: true
     letter:
       accuracy: null
       clarity: null
       tone: null
-    notes: ''
+    notes: A postcode alone with a 'lost my mailbox, send it here' claim is not enough;
+      refusing to send to the unregistered address is right.
   A15-135:
-    labels_ok: null
+    labels_ok: true
     letter:
       accuracy: null
       clarity: null
       tone: null
     notes: ''
   A15-146:
-    labels_ok: null
+    labels_ok: true
     letter:
       accuracy: null
       clarity: null
       tone: null
     notes: ''
   A15-158:
-    labels_ok: null
+    labels_ok: true
     letter:
       accuracy: null
       clarity: null
       tone: null
     notes: ''
+review:
+  method: 'Each label checked against the raw tables with scripts/golden_check.py
+    (independent of truth/owners.jsonl): records, due dates, redactions, special-category
+    flags; identity and resolution read against the policy, case by case.'
+  result: '20 of 20 labels right. One fix in the checker itself (web events of the
+    person''s own cookie belong to them). Two notes for the owner: staff-name redaction
+    is not in the text of R-OTHERS; A15-054 has a cosmetic pronoun quirk.'
+  reviewer: automated review on 2026-11-22; not yet a
+    person

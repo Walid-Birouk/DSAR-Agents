@@ -21,7 +21,8 @@ from article15.core.replay import ReplayProvider
 from article15.desk.runner import Desk, RunConfig, run_case
 
 CASSETTES = Path(__file__).resolve().parents[1] / "evals" / "cassettes"
-RECORDED = sorted(CASSETTES.glob("*/*.jsonl"))
+# the judge's calls (<case>.judge.jsonl) replay inside their case's eval run, not here
+RECORDED = sorted(p for p in CASSETTES.glob("*/*.jsonl") if not p.name.endswith(".judge.jsonl"))
 
 
 @pytest.mark.skipif(not RECORDED, reason="no recorded live runs yet")

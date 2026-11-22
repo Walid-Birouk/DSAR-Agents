@@ -17,7 +17,7 @@ import re
 from typing import Any
 
 from article15.desk.checklist import check_letter, normalise
-from article15.schemas import LetterDraft
+from article15.schemas import LetterDraft, System
 
 RECORD_ID = re.compile(r"\b(CS\d{4}|C\d{4}|DR\d{3}|FL-\d{6}|L\d{6}|T\d{5}|M\d{6}|E\d{7})\b")
 STATED_TOTAL = re.compile(r"\b(\d+) (?:enregistrements?|elements?|records?|items?)\b")
@@ -33,7 +33,10 @@ def check_claims(letter: LetterDraft, pack: dict[str, Any]) -> list[str]:
         )
     text = normalise(f"{letter.subject_line}\n{letter.body}")
     stated = sorted({int(n) for n in STATED_TOTAL.findall(text)} - {in_copy})
-    per_system = set(pack.get("record_counts", {}).values())
+    counts = pack.get("record_counts", {})
+    per_system = set(counts.values())
+    if len(counts) < len(System):
+        per_system.add(0)  # "web logs: 0 records" is true of a system with nothing in the copy
     wrong = [n for n in stated if n not in per_system]
     if wrong:
         problems.append(

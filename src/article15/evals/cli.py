@@ -52,6 +52,12 @@ def add_parser(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-ar
     rep.add_argument("report", help="report.json")
     rep.add_argument("--baseline", metavar="REPORT")
     rep.set_defaults(fn=_cmd_eval_report)
+    reg = evsub.add_parser(
+        "regrade", help="grade a finished run again with the current graders (no model calls, judge kept)"
+    )
+    reg.add_argument("report", help="report.json of the run")
+    reg.add_argument("--data", default="data/generated")
+    reg.set_defaults(fn=_cmd_eval_regrade)
     exp = evsub.add_parser("experiment", help="compare two reports for an experiment (E1-E4)")
     exp.add_argument("experiment", help="E1, E2, E3 or E4")
     exp.add_argument("a", help="report.json of arm A")
@@ -250,6 +256,41 @@ def _cmd_eval_report(args: argparse.Namespace) -> int:
         )
     _, md = reports.write(report, path.parent)
     print(md.read_text(encoding="utf-8"))
+    return 0 if report.green else 1
+
+
+def _cmd_eval_regrade(args: argparse.Namespace) -> int:
+    from article15.company.store import DataPaths
+    from article15.evals import report as reports
+    from article15.evals.graders import GradingContext, grade_case
+
+    path = Path(args.report)
+    old = reports.load(path)
+    grading = GradingContext.load(DataPaths(Path(args.data)))
+    runs = sorted(path.parent.glob("run-*"), key=lambda d: int(d.name.split("-")[1]))
+    repeats = []
+    for run_dir in runs:
+        grades = []
+        for case_id in old.cases_planned:
+            case_dir = run_dir / case_id
+            done = case_dir / "grade.json"
+            if not done.exists():
+                continue
+            before = json.loads(done.read_text(encoding="utf-8"))
+            kept = {
+                "letter_scores": before.get("letter_scores"),
+                "judge_cost_usd": before.get("judge_cost_usd", 0.0),
+            }
+            g = grade_case(case_dir, grading).model_copy(update=kept)
+            done.write_text(g.model_dump_json(indent=2) + "\n", encoding="utf-8", newline="\n")
+            grades.append(g)
+        repeats.append(grades)
+    quality = old.metrics.get("letter_quality") is not None
+    many = repeats if len(repeats) > 1 else None
+    report = reports.build(old.run, old.cases_planned, repeats[0], many, require_quality=quality)
+    _, md = reports.write(report, path.parent)
+    print(md.read_text(encoding="utf-8").split("\n## Reported")[0])
+    print(f"report: {md}")
     return 0 if report.green else 1
 
 
