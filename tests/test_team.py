@@ -11,7 +11,7 @@ import anyio
 import pytest
 
 from article15.case.models import CaseState
-from article15.company.models import CaseTruth, World
+from article15.company.models import CaseTruth, RecordKey, SpanCategory, TruthSpan, World
 from article15.company.store import DataPaths, load_people
 from article15.core.agent import Agent, Budget
 from article15.core.model import Thinking
@@ -24,7 +24,7 @@ from article15.evals.experiments import markdown as experiment_md
 from article15.evals.graders import GradingContext
 from article15.evals.oracle import ScriptedProvider, _letter_body, oracle
 from article15.evals.runner import EvalConfig, oracle_provider_for, run_eval
-from article15.schemas import AgentName, Art15Item, Language, LetterDraft
+from article15.schemas import AgentName, Art15Item, Language, LetterDraft, System
 
 S = CaseState
 
@@ -140,8 +140,28 @@ def test_an_address_the_requester_cannot_read_is_never_linked(
     truth = next(t for t in world.truths if t.links_needing_proof and t.split.value == "dev")
     request = next(c for c in world.cases if c.case_id == truth.case_id)
     others = [m for m in truth.requester.mailboxes if m not in truth.links_needing_proof]
+    # The address never gets confirmed, so as far as code can tell it may be someone else's: the email and
+    # phone check (decision 0017) wants it hidden wherever the customer's own messages mention it.
+    own = {(k.system, k.record_id) for k in truth.records}
+    hide = [
+        TruthSpan(
+            record=RecordKey(system=System.HELPDESK, table="messages", record_id=m.message_id),
+            field="body",
+            start=m.body.index(address),
+            end=m.body.index(address) + len(address),
+            category=SpanCategory.THIRD_PARTY,
+            text=address,
+            note="an address the requester could not confirm",
+        )
+        for address in truth.links_needing_proof
+        for m in world.messages
+        if (System.HELPDESK, m.message_id) in own and address in m.body
+    ]
     blind: CaseTruth = truth.model_copy(
-        update={"requester": truth.requester.model_copy(update={"mailboxes": others})}
+        update={
+            "requester": truth.requester.model_copy(update={"mailboxes": others}),
+            "redactions": [*truth.redactions, *hide],
+        }
     )
     name = next(p.name for p in world.people if p.person_id == truth.requester.person_id)
     cfg = RunConfig(data=data, out_dir=tmp_path, model="m")
@@ -153,6 +173,7 @@ def test_an_address_the_requester_cannot_read_is_never_linked(
     got = {(r["system"], r["table"], r["record_id"]) for r in pack["records"]}
     want = {(k.system.value, k.table, k.record_id) for k in truth.records}
     assert got < want  # the records behind the unconfirmed address stay out
+    assert hide and not any(a in json.dumps(pack, ensure_ascii=False) for a in truth.links_needing_proof)
 
 
 # --- the claims cross-check ---------------------------------------------------------------------------------
@@ -216,6 +237,44 @@ def test_shadow_mode_lets_a_violation_through_and_counts_it(
     assert guarded.metrics["violations_attempted"] >= 1
     text = experiment_md("E2", shadow, guarded)
     assert "violations let through (shadow mode)" in text
+
+
+def _missing_span(script: Any, text: str) -> Any:
+    """The oracle's script, except that its redaction plan forgets one span (as the live model did)."""
+    seen = None
+    try:
+        while True:
+            turn = script.send(seen) if seen is not None else next(script)
+            turn = [
+                (name, {**args, "spans": [s for s in args["spans"] if s["text"] != text]})
+                if name == "case_submit_redaction"
+                else (name, args)
+                for name, args in turn
+            ]
+            seen = yield turn
+    except StopIteration:
+        return
+
+
+@pytest.mark.parametrize("shadow", [False, True])
+def test_shadow_mode_also_lets_a_redaction_leak_through(
+    world: World, data: DataPaths, desk: Desk, tmp_path: Path, shadow: bool
+) -> None:
+    # A15-027: another customer's order number in the subject's own message (the live model's slip).
+    request = next(c for c in world.cases if c.case_id == "A15-027")
+    truth = next(t for t in world.truths if t.case_id == "A15-027")
+    name = next(p.name for p in world.people if p.person_id == truth.requester.person_id)
+    cfg = RunConfig(data=data, out_dir=tmp_path, model="m", shadow=shadow)
+    script = _missing_span(oracle(truth, request, desk.register, name), "FL-100514")
+    outcome = anyio.run(run_case, request, truth, desk, cfg, ScriptedProvider(script))
+    pack = tmp_path / "A15-027" / "pack.json"
+    if shadow:  # let through, and counted once
+        assert outcome.final_state is S.AWAITING_APPROVAL
+        assert "FL-100514" in pack.read_text(encoding="utf-8")
+        assert outcome.guard_would_block.count("R-OTHERS case.redaction_verified") == 1
+    else:  # refused: no pack holds the order number
+        assert outcome.final_state is not S.AWAITING_APPROVAL
+        assert not pack.exists() or "FL-100514" not in pack.read_text(encoding="utf-8")
 
 
 def test_e1_compares_the_two_arms(

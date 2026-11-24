@@ -1,8 +1,7 @@
 # 0012: The multi-agent desk, proof of control, the claims check and shadow mode
 
-**Status: provisional.** Made on 2026-11-21 while the project owner was away, to be confirmed or changed
-(see [pending-review.md](pending-review.md), P8 to P17). The choices the plan leaves open are marked
-*(open choice)*.
+**Status: accepted** on 2026-11-23, after starting as provisional choices ([0018](0018-provisional-choices-settled.md)
+says what changed).
 
 **Decision.** M4 adds the seven-agent arm of experiment E1 (`src/article15/desk/team.py`, `roles/`) and the
 pieces both arms were waiting for.
@@ -55,6 +54,9 @@ pieces both arms were waiting for.
 - **R-COPY** guard `pack.electronic_format`: the copy must be in a commonly used electronic format. *(Open
   choice:)* the copy is JSON now; the PDF download comes with the web app (M6).
 - **Shadow mode for E2** (`--shadow`): the state machine's guards log what they would block, and let it pass.
+  *Changed on 2026-11-23 (was P14):* shadow mode also covers the stage tools' policy checks, the
+  redaction verifier (R-OTHERS, counted once at the transition) and the follow-up limit (R-IDENTITY). The
+  scoped servers stay enforced, so E2 measures the checks, not the scoping.
   - *(Open choice:)* the scoped servers and the stage tools' own checks stay enforced, because they are the
     infrastructure being protected, not policy prompts.
   - Grades count refused rule violations and shadowed ones; E2 compares "attempted" and "let through".

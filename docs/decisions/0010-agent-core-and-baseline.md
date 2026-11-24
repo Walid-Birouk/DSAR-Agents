@@ -58,7 +58,7 @@ end to end (`src/article15/desk/`).
     months; the data they collect is kept 25 months.
   - **cnil.fr/fr/adresser-une-plainte:** the complaint channel and postal address.
 
-  Ferlane's own choices, made by the project owner:
+  Ferlane's own choices, set for this project:
   - no transfers outside the EEA;
   - no automated decisions;
   - recipients named as categories, not invented companies;

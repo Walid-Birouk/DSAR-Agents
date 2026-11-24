@@ -831,8 +831,10 @@ class _Generator:
                     ),
                     request_types=[RequestType.ACCESS],
                     expected_identity=IdentityOutcome.NEEDS_MORE_INFO,
-                    expected_final_identity=IdentityOutcome.NEEDS_MORE_INFO,
-                    expected_resolution=Resolution.ASK_REQUESTER,
+                    # Once the representative confirms they have no written mandate, the request is refused
+                    # with the reasons and how to go ahead (Art. 12(4); decision 0018).
+                    expected_final_identity=IdentityOutcome.REJECTED,
+                    expected_resolution=Resolution.REFUSE,
                     release_records=False,
                     difficulties=["representative", "no_mandate"],
                 )

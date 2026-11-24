@@ -16,19 +16,30 @@ from collections.abc import Awaitable, Callable
 
 from pydantic import Field
 
-from article15.case.models import CaseState
+from article15.advisor.egress import EgressRefused
+from article15.advisor.models import Question
+from article15.advisor.service import EXTENSION_RECORDS, REPEAT_THRESHOLD
+from article15.case.machine import GuardFailure
+from article15.case.models import CaseState, Flags
+from article15.core import mcp_tools
 from article15.core.mcp_tools import McpCallError
 from article15.core.tools import FunctionTool, Tool, ToolResult, error_result
 from article15.desk import pack as packing
+from article15.desk.advice import Unavailable, earlier_requests
 from article15.desk.claims import COPY_FORMAT, check_claims
 from article15.desk.redaction import (
     RedactionSubmission,
+    foreign_contacts,
     foreign_order_numbers,
     masked_fields,
+    own_contacts,
+    readable_staff,
     resolve,
     verify,
 )
+from article15.desk.refusal import build_refusal
 from article15.desk.session import MAX_FOLLOW_UPS, MAX_VALIDATION_ROUNDS, CaseSession, Pause, refusal
+from article15.policy.models import RedactKind
 from article15.schemas import (
     DiscoveryResult,
     IdentityDecision,
@@ -115,6 +126,55 @@ def _wrong_stage(session: CaseSession, tool: str, expected: CaseState) -> ToolRe
     )
 
 
+TRIAGE_GUARDS = frozenset({"case.repeat_request_needs_a_person", "case.large_request_needs_a_person"})
+
+
+async def triage(session: CaseSession) -> Flags:
+    """What code itself checks once identity is verified, before any search: earlier access requests in the
+    last 12 months (from the CRM) and the size of the person's history (from the scoped servers). The
+    thresholds are the DPO advisor's, so the guard and the advice agree. Nothing here reaches the model."""
+    flags = session.case.flags
+    try:
+        earlier, _ = await earlier_requests(session)
+        index = await packing.scope_index(session.hub)  # not cached: proof of control adds records later
+    except McpCallError:
+        return flags  # a system is down; discovery will mark the case PARTIAL
+    systems = {k[0] for k in index}
+    large = len(index) >= EXTENSION_RECORDS or (len(systems) == len(System) and len(index) >= 100)
+    return flags.model_copy(update={"repeat_request": earlier >= REPEAT_THRESHOLD, "large_request": large})
+
+
+TRIAGE_QUESTIONS = {
+    "case.repeat_request_needs_a_person": Question.EXCESSIVE,
+    "case.large_request_needs_a_person": Question.EXTENSION,
+}
+
+
+async def _advice_for(session: CaseSession, failures: list[GuardFailure]) -> str:
+    if session.consult is None:
+        return ""
+    notes = []
+    for f in failures:
+        question = TRIAGE_QUESTIONS[f.guard]
+        try:
+            advice = await session.consult(question)
+        except (EgressRefused, Unavailable) as exc:
+            session.sink.emit(
+                "advisor.consult", case_id=session.case.case_id, question=question.value, status="error"
+            )
+            notes.append(f"advisor: {exc}")
+            continue
+        session.sink.emit(
+            "advisor.consult",
+            case_id=session.case.case_id,
+            question=question.value,
+            status="ok",
+            recommendation=advice.recommendation.value,
+        )
+        notes.append(f"advisor ({advice.recommendation.value}): {'; '.join(advice.reasons)}")
+    return "".join(f"; {n}" for n in notes)
+
+
 def _to_human(session: CaseSession, reason: str) -> ToolResult:
     failures = session.advance(S.NEEDS_HUMAN, reason)
     if failures:
@@ -190,7 +250,12 @@ def build_case_tools(session: CaseSession) -> list[Tool]:
                 return error_result("refused", f"{exc.rule_id}: {exc}")
             session.hub.holder.token = token
             session.update(identity=d)
+            session.update(flags=await triage(session))
             failures = session.advance(S.IDENTITY_VERIFIED, f"verified: {d.subject_id}")
+            if failures and all(f.guard in TRIAGE_GUARDS for f in failures):
+                # Code found a repeat request or a very large history: a person decides before any search,
+                # with the advisor's view when it can be had.
+                return _to_human(session, refusal(failures) + await _advice_for(session, failures))
             if failures:
                 return error_result("refused", refusal(failures))
             return ToolResult(
@@ -199,11 +264,13 @@ def build_case_tools(session: CaseSession) -> list[Tool]:
             )
         if d.outcome is IdentityOutcome.NEEDS_MORE_INFO:
             if session.follow_ups_sent >= MAX_FOLLOW_UPS:
-                return error_result(
-                    "refused",
-                    f"R-IDENTITY: {MAX_FOLLOW_UPS} follow-up questions were already sent; decide VERIFIED or "
-                    "REJECTED, or escalate with case_escalate",
-                )
+                reason = f"{MAX_FOLLOW_UPS} follow-up questions were already sent"
+                if not session.shadow:
+                    return error_result(
+                        "refused",
+                        f"R-IDENTITY: {reason}; decide VERIFIED or REJECTED, or escalate with case_escalate",
+                    )
+                session.shadow_log.append(GuardFailure("tool.follow_up_limit", "R-IDENTITY", reason))
             assert d.follow_up_question is not None
             language = session.case.intake.language if session.case.intake else Language.FR
             session.notifier.send(
@@ -226,6 +293,8 @@ def build_case_tools(session: CaseSession) -> list[Tool]:
                 Pause.AWAITING_REQUESTER,
             )
         session.update(identity=d, rejection_reason=d.rejection_reason)
+        language = session.case.intake.language if session.case.intake else Language.FR
+        session.update(refusal=build_refusal(session.case, session.register, language))
         failures = session.advance(S.REJECTED, "identity not established")
         if failures:
             return error_result("refused", refusal(failures))
@@ -269,6 +338,20 @@ def build_case_tools(session: CaseSession) -> list[Tool]:
             duplicates = [k for k, n in Counter(keys).items() if n > 1]
             if duplicates:
                 return error_result("invalid", f"{len(duplicates)} record(s) are listed more than once")
+            # R-SCOPE in code: the scoped servers return only this person's records, so every record they
+            # return belongs in the copy. A list that leaves some out is refused (decision 0018).
+            missing = sorted(session.scope - set(keys), key=packing.sort_key)
+            if missing:
+                shown = ", ".join(f"{s.value}/{t}/{i}" for s, t, i in missing[:10])
+                more = f" (and {len(missing) - 10} more)" if len(missing) > 10 else ""
+                reason = f"{len(missing)} record(s) the searches returned for this customer are not listed"
+                if not session.shadow:
+                    return error_result(
+                        "refused",
+                        f"R-SCOPE: {reason}: {shown}{more}. Every record of the verified person goes in the "
+                        "copy; list them all.",
+                    )
+                session.shadow_log.append(GuardFailure("case.discovery_complete", "R-SCOPE", reason))
             session.records = await packing.fetch_records(session.hub, keys)
         except McpCallError as exc:
             return error_result("unavailable", f"records could not be fetched for the pack ({exc})")
@@ -333,16 +416,31 @@ def build_case_tools(session: CaseSession) -> list[Tool]:
         own_orders = {
             r.record_id for r in session.records.values() if r.system is System.ORDERS and r.table == "orders"
         }
-        problems += foreign_order_numbers(masked_fields(fields, plan, language), own_orders)
-        if problems:
+        masked = masked_fields(fields, plan, language)
+        problems += foreign_order_numbers(masked, own_orders)
+        try:
+            verified = session.authority.resolver.resolve(session.hub.holder.token).emails
+        except ScopeRefused:
+            verified = frozenset()
+        problems += foreign_contacts(masked, *own_contacts(fields, verified))
+        if RedactKind.STAFF in session.policy.redact:  # policy v2 (E3)
+            staff = [
+                str(r.fields["staff_name"])
+                for r in session.records.values()
+                if r.system is System.HELPDESK and r.fields.get("staff_name")
+            ]
+            problems += readable_staff(masked, staff)
+        if problems and not session.shadow:
             return error_result(
                 "refused",
                 "R-OTHERS: the redaction check failed: "
                 + "; ".join(problems)
                 + ". Add a span for each place (leave occurrence empty to hide every occurrence in a field).",
             )
+        # Shadow mode (E2): the plan goes through as the model wrote it. The check's result is kept, so the
+        # state machine's R-OTHERS guard logs the violation once, at the transition below.
         flags = session.case.flags.model_copy(update={"special_category_found": bool(plan.special_category)})
-        session.update(redaction=plan, redaction_check_passed=True, flags=flags)
+        session.update(redaction=plan, redaction_check_passed=not problems, flags=flags)
         failures = session.advance(S.REDACTION_DONE, f"{len(plan.spans)} spans")
         if failures:
             session.update(redaction_check_passed=False)
@@ -386,6 +484,7 @@ def build_case_tools(session: CaseSession) -> list[Tool]:
             refs=discovery.records,
             records=session.records,
             plan=plan,
+            hide_staff=RedactKind.STAFF in session.policy.redact,
         )
         session.pack = pack
         session.update(
@@ -441,7 +540,7 @@ def build_case_tools(session: CaseSession) -> list[Tool]:
                 *free_text,
             ]
         )
-        return ToolResult(text=f'<untrusted_data source="case_read_pack">\n{text}\n</untrusted_data>')
+        return ToolResult(text=mcp_tools.untrusted("case_read_pack", text))
 
     # --- validation -----------------------------------------------------------------------------------
 

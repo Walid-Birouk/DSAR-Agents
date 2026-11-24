@@ -1,0 +1,45 @@
+# Alerts for the operator (PLAN.md 9). The metric names are those the collector exports (checked against a running
+# Prometheus on 2026-11-23); what to do for each is in docs/operations.md. Wiring a notifier (email, Slack)
+# needs a notification channel: add an Alertmanager with its receiver and point Prometheus at it.
+groups:
+  - name: article15-desk
+    rules:
+      - alert: DeskSpendNearDailyCap
+        # The app's own cap is EUR 2 a day, counted 1:1 in USD (P33); warn at 80%.
+        expr: sum(increase(a15_llm_cost_USD_total[24h])) > 1.6
+        labels:
+          severity: warning
+        annotations:
+          summary: "Model spend in the last 24 h is past 80% of the daily cap"
+          runbook: "docs/operations.md#spend-near-the-daily-cap"
+
+      - alert: DeskSystemFailures
+        # Company systems, providers or the code failing (not the model's form errors, not guard refusals):
+        # PLAN.md's "error rate above 5%".
+        expr: |
+          sum(rate(a15_tool_calls_total{status=~"error|timeout|unavailable"}[15m]))
+            / clamp_min(sum(rate(a15_tool_calls_total[15m])), 1e-9) > 0.05
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: "More than 5% of tool calls fail for system reasons"
+          runbook: "docs/operations.md#system-failures"
+
+      - alert: DeskModelSlow
+        expr: histogram_quantile(0.95, sum by (le) (rate(a15_llm_latency_seconds_bucket[15m]))) > 30
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "95th percentile model latency above 30 s"
+          runbook: "docs/operations.md#the-model-is-slow"
+
+      - alert: DeskGuardRefusalsSpike
+        # The guards refusing state changes far more than usual: a model regression, or someone pushing.
+        expr: sum(increase(a15_case_transitions_total{status="refused"}[1h])) > 20
+        labels:
+          severity: info
+        annotations:
+          summary: "Guards refused more than 20 state changes in an hour"
+          runbook: "docs/operations.md#guard-refusals-spike"

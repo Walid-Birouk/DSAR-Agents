@@ -1,22 +1,17 @@
-# Decisions waiting for review
+# Provisional choices P1-P52
 
-The project owner was away from 2026-11-21 and asked for the build to go on without them. Choices the plan
-does not settle were made provisionally and are listed here, so that each can be confirmed or changed. On
-2026-11-22 the owner returned, added a DeepSeek key (USD 1.22 of credit), asked for the golden 20 to be reviewed
-with the recommended method, and for the code to be pushed to GitHub; P47-P50 come from that session.
+Milestones M2-M7 were built with these provisional choices, so that the work could go on while each was
+tested. All were settled on 2026-11-23: [decision 0018](0018-provisional-choices-settled.md) gives the outcome
+of each and the evidence. Eight changed:
+- P12 and P37: PDF copy;
+- P17: refusal letter;
+- P24: no fallback in evals;
+- P46: headers on Vercel;
+- and the shape of P2, P6 and P49.
 
-When a decision is confirmed, mark its record "accepted" and remove it from this list.
+The list below is kept as the record of what was proposed. What is still open is listed in 0018, section 4.
 
-## Blocked on the owner
-
-| What | Needs | Unblocks |
-|---|---|---|
-| E1 (single vs team) and E2 (shadow vs guarded) with a real model | more DeepSeek credit (about USD 5-15) | M4 "done when" |
-| Validate the collector config and bring up `deploy/observability` | the Docker daemon running | the private Jaeger/Grafana stack |
-| The public deployment (M7): build the image, `docker compose up` on the server, HTTPS, alerts | a host (see docs/running.md, free options), a domain; the Docker daemon | the live demo |
-| Public red-team round, the 2-minute video, CV lines | the live demo; you | the launch |
-
-## Provisional decisions
+## The choices as proposed
 
 | # | Decision | Record | Alternatives |
 |---|---|---|---|
@@ -33,7 +28,6 @@ When a decision is confirmed, mark its record "accepted" and remove it from this
 | P11 | Proof-of-control replies arrive 2 simulated hours later (inside the 24 h grant) | 0012 | a day later, with the subject grant renewed |
 | P12 | The copy is JSON for now; the PDF comes with the web app's download (M6) | 0012 | PDF now (needs a PDF library) |
 | P13 | Claims cross-check (counts, stated totals, record IDs, Art. 15 facts, items_covered) blocks VALIDATED through new guard `case.claims_verified`, added to R-VALIDATION | 0012 | advisory only, shown to the validator |
-| P14 | Shadow mode (E2) covers the state machine's guards; scoped servers and stage-tool checks stay enforced | 0012 | also shadow the stage-tool checks |
 | P15 | Every eval case at AWAITING_APPROVAL gets a release probe with no approval (not in shadow mode) | 0012 | test the release guard only in unit tests |
 | P16 | No entity detector for the redaction agent until Presidio arrives with M5 | 0012 | a rule-based detector now |
 | P17 | Refusal letter (Art. 12(4)) still deferred | 0012 | draft it now with the letter agent |
@@ -66,9 +60,9 @@ When a decision is confirmed, mark its record "accepted" and remove it from this
 | P44 | One image for web and advisor; non-root, read-only containers; Caddy 2.11.9 automatic HTTPS; image tags pinned | 0015 | a platform service (D6 alternative) |
 | P45 | Nightly online backup of the web store (sessions, runs, audit log), kept 14 days; sandboxes not backed up | 0015 | also back up sandboxes |
 | P46 | Security headers and CSP at Caddy; 64 KB request-body limit | 0015 | - |
-| P47 | "deepseek-chat" (the owner's choice) is served as `deepseek-flash` with thinking off: DeepSeek retired the `deepseek-chat` name on 2026-07-24 and mapped it to that mode; the account lists only `deepseek-flash` and `deepseek-v4-pro` | 0010 | `deepseek-v4-pro` (about 4x the price) |
+| P47 | The chosen model "deepseek-chat" is served as `deepseek-flash` with thinking off: DeepSeek retired the `deepseek-chat` name on 2026-07-24 and mapped it to that mode; the account lists only `deepseek-flash` and `deepseek-v4-pro` | 0010 | `deepseek-v4-pro` (about 4x the price) |
 | P48 | Live eval runs use a per-case cap of USD 0.05 (`A15_CASE_MAX_COST_USD`), 10x the measured cost, so the budget reservation lets 4 cases run at once on a small budget; the app default stays 0.30 | 0011 | keep 0.30 and run one case at a time |
 | P49 | The golden 20 were reviewed on 2026-11-22 by an automated review, not by a person: every label checked against the raw tables with `scripts/golden_check.py`, the judgment calls read against the policy. 20 of 20 right; see `ratings.yaml` `review` | 0011 | a person's review (about 2 hours) |
 | P50 | Discovery precision counts the subject's records gathered before a case goes to a person (it used to expect none on any non-release case, which marked 142 of the subject's own records "extra" on A15-019); missed records still count only where a pack is due. New `a15 eval regrade` re-grades a finished run for free | 0011 | precision on release cases only |
-| P51 | The redaction verifier also refuses a submission while an order number that is not one of the customer's own orders is readable (owner chose "code guard + prompt line"); emails and phones are not checked in code yet | 0011 | also check emails and phones not the subject's |
-| P52 | The prompt line ("anything that points to another person: order number, email, phone") is in the team's redaction prompt only. In `single_role.md` it would change every recorded single-agent run (about USD 0.60 to re-record, more than the credit left) | 0011 | add it to single_role.md and re-record everything |
+| P51 | The redaction verifier also refuses a submission while an order number that is not one of the customer's own orders is readable (a code guard and a prompt line); emails and phones are not checked in code yet | 0011 | also check emails and phones not the subject's |
+| P52 | The prompt line ("anything that points to another person: order number, email, phone") is in the team's redaction prompt only. In `single_role.md` it would change every recorded single-agent run (about USD 0.60 to re-record) | 0011 | add it to single_role.md and re-record everything |

@@ -1,8 +1,7 @@
 # 0011: The eval harness
 
-**Status: provisional.** Made on 2026-11-21 while the project owner was away, to be confirmed or changed
-(see [pending-review.md](pending-review.md)). Everything below follows PLAN.md section 8 where the plan
-settles a point; the choices the plan leaves open are marked *(open choice)*.
+**Status: accepted** on 2026-11-23, after starting as provisional choices ([0018](0018-provisional-choices-settled.md)
+says what changed).
 
 **Decision.** M3 builds the eval harness in `src/article15/evals/`.
 
@@ -58,7 +57,7 @@ settles a point; the choices the plan leaves open are marked *(open choice)*.
     language, the copy's record counts and the register.
   - *(Open choice:)* it runs on the same model as the agents, and it is capped at USD 0.02 per letter.
   - Its calls are recorded and replayed like the agents'.
-  - `agreement` compares its scores with the owner's ratings on the golden 20.
+  - `agreement` compares its scores with a person's ratings on the golden 20.
 - **The runner** (`runner.py`) runs cases in parallel and can resume.
   - **Budget cap:** a case starts only if the money spent, plus the cap of every running case, plus its own
     cap, fits the budget. A run therefore cannot overspend, and the cases it could not afford are listed.
@@ -97,7 +96,7 @@ settles a point; the choices the plan leaves open are marked *(open choice)*.
 - No baseline report for the real single agent yet: it needs the live DeepSeek runs (no API key yet).
 - On the smoke suite the oracle first showed 95.8% discovery recall: two cases (A15-008, A15-012) hold an
   address that needs proof of control. M4 added that step (decision 0012), and the oracle is now fully green.
-- The judge is not calibrated until the owner rates golden-20 letters from a live run.
+- The judge is not calibrated until a person rates golden-20 letters from a live run.
 
 **Tested by.** `tests/test_evals.py`.
 - **Suites:** sizes and the split.

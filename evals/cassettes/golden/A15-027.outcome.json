@@ -11,10 +11,12 @@
     "DISCOVERY_DONE",
     "REDACTION_DONE",
     "DRAFT_READY",
+    "REDACTION_DONE",
+    "DRAFT_READY",
     "VALIDATED",
     "AWAITING_APPROVAL"
   ],
-  "pack_hash": "21766a15985dd0851a96f3c7d1c971338e8a1c351f44383604080b6cfee6a65c",
+  "pack_hash": "b2826b727c7c78348f016c27331719dd8f98a2a21a305f062e420d6f941d5926",
   "follow_ups": 0,
   "tool_calls": [
     "case_submit_intake:ok",
@@ -45,15 +47,19 @@
     "case_submit_redaction:ok",
     "case_submit_letter:ok",
     "case_read_pack:ok",
+    "case_submit_letter:refused",
+    "case_submit_validation:ok",
+    "case_submit_letter:ok",
+    "case_read_pack:ok",
     "case_submit_validation:ok"
   ],
   "totals": {
-    "calls": 13,
-    "input_tokens": 166805,
-    "cache_hit_tokens": 159744,
-    "output_tokens": 5145,
+    "calls": 17,
+    "input_tokens": 255598,
+    "cache_hit_tokens": 247424,
+    "output_tokens": 8377,
     "reasoning_tokens": 0,
-    "cost_usd": 0.004625
+    "cost_usd": 0.006995
   },
   "policy_version": "1.0.0",
   "prompt_hash": "5544dfe99be6261d",
@@ -63,6 +69,6 @@
   "arm": "single",
   "shadow": false,
   "guard_would_block": [],
-  "elapsed_s": 28.86,
-  "fingerprint": "dc069750f29fea23d0d1044eca5d00da6212709d246281dbd1917c447ef85212"
+  "elapsed_s": 17.09,
+  "fingerprint": "1a9d45aef2545311075b72ee9d6dc0ee69296b255482da2d120dbcb59ba0c3a2"
 }

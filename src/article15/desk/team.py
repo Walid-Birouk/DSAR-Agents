@@ -27,13 +27,14 @@ from article15.company.register import Register
 from article15.core.agent import Agent, Budget, Caps
 from article15.core.agent_tool import AgentTool
 from article15.core.events import EventSink
+from article15.core.mcp_tools import escape_untrusted
 from article15.core.model import Thinking, sha256_hex
 from article15.core.provider import Provider
 from article15.core.tools import Tool, ToolLogEntry, ToolManager, ToolResult
 from article15.desk.session import CaseSession
 from article15.policy.models import Policy
 from article15.policy.render import render_policy_section
-from article15.schemas import AgentName, Issue, Strict
+from article15.schemas import AgentName, Issue, Strict, System
 
 A = AgentName
 S = CaseState
@@ -184,7 +185,12 @@ def _with_note(lines: list[str], brief: Brief) -> str:
 
 def _request_block(session: CaseSession) -> list[str]:
     r = session.request
-    return ["<untrusted_request>", f"Subject: {r.subject_line}", r.text, "</untrusted_request>"]
+    return [
+        "<untrusted_request>",
+        escape_untrusted(f"Subject: {r.subject_line}"),
+        escape_untrusted(r.text),
+        "</untrusted_request>",
+    ]
 
 
 def slice_for(agent: AgentName, session: CaseSession, brief: Brief) -> str:
@@ -221,11 +227,18 @@ def slice_for(agent: AgentName, session: CaseSession, brief: Brief) -> str:
                 "The requester has answered the address confirmation: search all four systems again."
             )
     elif agent is A.REDACTION:
-        tickets = [x.record_id for x in (c.discovery.records if c.discovery else []) if x.table == "tickets"]
+        found = c.discovery.records if c.discovery else []
+        tickets = [x.record_id for x in found if x.table == "tickets"]
+        own_orders = sorted(x.record_id for x in found if x.system is System.ORDERS and x.table == "orders")
         lines = [
             *head,
-            f"Tickets in the copy: {', '.join(tickets) or 'none'}. Read each one; the records outside the "
-            "helpdesk hold no free text.",
+            f"Tickets in the copy: {', '.join(tickets) or 'none'}. Read each one. Only their messages hold "
+            "free text, and each message is a record of its own (its message ID as record_id, field 'body'); "
+            "leave "
+            "the records outside the helpdesk alone.",
+            f"The customer's own orders: {', '.join(own_orders) or 'none'}. Their own order numbers, name "
+            "and "
+            "addresses stay readable; any other order number points to another customer.",
         ]
     elif agent is A.LETTER:
         counts: dict[str, int] = {}
@@ -248,7 +261,35 @@ def slice_for(agent: AgentName, session: CaseSession, brief: Brief) -> str:
         if c.claims_problems:
             lines.append("The system's claims check of the previous draft: " + "; ".join(c.claims_problems))
     elif agent is A.VALIDATOR:
-        lines = [*head, "The pack is assembled. Read it with case_read_pack, then give your verdict."]
+        # The validator starts fresh, so it is told what code itself has checked on this exact pack; without
+        # it, a pack whose structured records it cannot see looks unverifiable (tuned on the dev smoke run).
+        records = (session.pack or {}).get("records", [])
+        by_system: dict[str, list[str]] = {}
+        for rec in records:
+            by_system.setdefault(rec["system"], []).append(rec["record_id"])
+        listed = "; ".join(
+            f"{s} {len(ids)} ({', '.join(ids[:12])}{', ...' if len(ids) > 12 else ''})"
+            for s, ids in sorted(by_system.items())
+        )
+        spans = len(c.redaction.spans) if c.redaction else 0
+        special = len(c.redaction.special_category) if c.redaction else 0
+        lines = [
+            *head,
+            "The pack is assembled. Read it with case_read_pack, then give your verdict.",
+            "What the system itself has checked on this pack (code, not a model):",
+            f"- the copy holds {len(records)} records, exactly the ones discovery submitted, each returned "
+            "by "
+            f"the scoped servers for this customer: {listed or 'none'}. Records outside the helpdesk hold no "
+            "free text, so case_read_pack shows the helpdesk text only.",
+            f"- redaction verifier: {'passed' if c.redaction_check_passed else 'NOT passed'}; {spans} "
+            "passage(s) hidden, nothing hidden is still readable, and no other customer's order number, "
+            "email "
+            "address or phone number is left readable.",
+            "- claims cross-check of the letter against the copy: "
+            + ("no problem found." if not c.claims_problems else "; ".join(c.claims_problems) + "."),
+            f"- special-category mentions flagged: {special}. They stay in the copy and the reviewer "
+            "acknowledges them when approving; flagged correctly, they are not a defect of the pack.",
+        ]
     else:  # pragma: no cover
         raise ValueError(agent)
     return _with_note(lines, brief)

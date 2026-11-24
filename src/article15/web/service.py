@@ -36,11 +36,14 @@ from article15.company.store import DataPaths, load_cases, load_people, load_tru
 from article15.core.live import live_provider
 from article15.core.provider import Provider
 from article15.desk import release as reviewer
+from article15.desk.pdf import pack_pdf
 from article15.desk.runner import Desk, RunConfig, reopen_desk, run_case
 from article15.evals.oracle import ScriptedProvider, oracle, team_agents, team_script
 from article15.schemas import Channel, System
 from article15.web.guards import HumanCheck, IpLimiter, VisitorKeys, real_data_problems
 from article15.web.store import WebStore, now
+from article15.web.story import CASSETTES, FEATURED, REPO, PacedReplay, cassette, recorded_outcome
+from article15.web.story import story as build_story
 
 log = logging.getLogger(__name__)
 S = CaseState
@@ -52,7 +55,8 @@ BREAK_KINDS = frozenset(
         CaseKind.IDENTITY_REPRESENTATIVE,
     }
 )
-REVIEW_ACTIONS = ("approve", "request_changes", "reject", "extend", "escalate")
+REVIEW_ACTIONS = ("approve", "request_changes", "reject", "extend", "escalate", "send_refusal")
+DOWNLOADS = ("pack.json", "pack.pdf", "letter.md", "refusal.md")
 
 
 class WebError(Exception):
@@ -76,8 +80,16 @@ class WebConfig:
     eval_reports: list[Path] = field(default_factory=lambda: [Path("evals/reports"), Path("runs/eval")])
     human_check: bool = True  # a proof of work before every live run (guards.py)
     trust_proxy: bool = False  # take the client address from X-Forwarded-For (behind the reverse proxy)
+    secure_cookies: bool = (
+        False  # the session cookie only over HTTPS (on in production: A15_SECURE_COOKIES=1)
+    )
     ip_runs_per_hour: int = 3
     ip_runs_per_day: int = 10
+    # The guided story (decision 0016): the recorded live runs it replays, and the pace of the replay.
+    story_cassettes: Path = CASSETTES
+    replay_step_s: float = 1.2
+    # The first page (decision 0017): what the guard layer did on the recorded live runs (`a15 eval harness`).
+    harness_summary: Path = REPO / "evals" / "reports" / "harness.json"
 
 
 @dataclass
@@ -102,6 +114,7 @@ class DeskService:
         self.keys = VisitorKeys()
         self.human = HumanCheck()
         self.ips = IpLimiter(cfg.ip_runs_per_hour, cfg.ip_runs_per_day)
+        self._story: dict[str, Any] | None = None
 
     # --- catalogue -----------------------------------------------------------------------------------------
 
@@ -214,6 +227,13 @@ class DeskService:
                 admit()
             request, truth, mode = self._visitor_request(run_id, visitor), None, "live"
             self.visitor_requests[run_id] = request
+        elif source == "story":
+            case_id = case_id or FEATURED
+            if case_id != FEATURED or case_id not in self.requests:
+                raise WebError("the story has one featured case", 404)
+            request, truth = self.requests[case_id], self.truths[case_id]
+            # A recorded live run, replayed: no model, no cost, the same every time.
+            mode = "replay" if self.story_recorded() else "scripted"
         else:
             if case_id not in self.requests:
                 raise WebError("unknown case", 404)
@@ -224,7 +244,8 @@ class DeskService:
                 self._check_limits(session_id, own)
                 if admit:
                     admit()
-        self.store.add_run(run_id, session_id, request.case_id, mode, self.cfg.arm, source)
+        arm = "single" if mode == "replay" else self.cfg.arm  # the recordings are of the one-agent desk
+        self.store.add_run(run_id, session_id, request.case_id, mode, arm, source)
         if source == "break":
             self.store.add_attempt(run_id, truth.kind.value if truth else "visitor")
         self.tasks[run_id] = asyncio.create_task(
@@ -233,13 +254,45 @@ class DeskService:
         return run_id
 
     def run_config(self, session_id: str, run_id: str) -> RunConfig:
+        run = self.store.run(run_id) or {}
+        out_dir = self.cfg.root / "sessions" / session_id / run_id
+        if run.get("mode") == "replay":
+            # Replay must send exactly what was recorded: the recorded model, the one-agent desk and the
+            # fixed proof-of-control key of recorded runs (the featured case needs no proof of control).
+            return RunConfig(
+                data=self.cfg.data,
+                out_dir=out_dir,
+                model=str(recorded_outcome(str(run["case_id"]), self.cfg.story_cassettes).get("model")),
+                arm="single",
+            )
         return RunConfig(
             data=self.cfg.data,
-            out_dir=self.cfg.root / "sessions" / session_id / run_id,
+            out_dir=out_dir,
             model=self.cfg.live_model or "scripted",
-            arm=self.cfg.arm,
+            arm=str(run.get("arm") or self.cfg.arm),
             link_code_key=hmac.new(self.link_secret, run_id.encode(), hashlib.sha256).digest(),
         )
+
+    # --- the first page: the guard layer (decision 0017) ----------------------------------------------------
+
+    def harness(self) -> dict[str, Any]:
+        path = self.cfg.harness_summary
+        if not path.exists():
+            raise WebError("no harness summary yet: run `a15 eval harness`", 404)
+        return dict(json.loads(path.read_text(encoding="utf-8")))
+
+    # --- the guided story (decision 0016) ------------------------------------------------------------------
+
+    def story_recorded(self) -> bool:
+        return cassette(FEATURED, self.cfg.story_cassettes).exists() and bool(
+            recorded_outcome(FEATURED, self.cfg.story_cassettes)
+        )
+
+    def story(self) -> dict[str, Any]:
+        """The featured case: the request, where its data is, the naive copy and the recorded run."""
+        if self._story is None:
+            self._story = build_story(self.cfg.data, self.cfg.root, FEATURED, self.cfg.story_cassettes)
+        return {**self._story, "mode": "replay" if self.story_recorded() else "scripted"}
 
     def _provider(
         self, request: RequestCase, truth: CaseTruth | None, mode: str, live: Provider | None = None
@@ -247,6 +300,8 @@ class DeskService:
         if mode == "live":
             assert live is not None
             return live
+        if mode == "replay":
+            return PacedReplay(cassette(request.case_id, self.cfg.story_cassettes), self.cfg.replay_step_s)
         assert truth is not None
         name = self.desk.people[truth.requester.person_id].name
         script = oracle(truth, request, self.desk.register, name)
@@ -371,6 +426,8 @@ class DeskService:
             "tools": tools,
             "audit": self.store.audit_of(run_id),
             "can_review": case.get("state") == S.AWAITING_APPROVAL.value,
+            # a rejected case's Art. 12(4) letter waits for the reviewer to send it
+            "can_send_refusal": case.get("state") == S.REJECTED.value and bool(case.get("refusal")),
             "special_category": bool(case.get("flags", {}).get("special_category_found")),
         }
 
@@ -391,9 +448,20 @@ class DeskService:
 
     def file(self, session_id: str, run_id: str, name: str) -> Path:
         run = self.owned(session_id, run_id)
-        if name not in ("pack.json", "letter.md"):
+        if name not in DOWNLOADS:
             raise WebError("unknown file", 404)
-        path = self._dir(session_id, run_id, run["case_id"]) / name
+        folder = self._dir(session_id, run_id, run["case_id"])
+        path = folder / name
+        if name == "pack.pdf" and not path.exists() and (folder / "pack.json").exists():
+            # rendered from the exact pack an approval signs (desk/pdf.py), once
+            pack = json.loads((folder / "pack.json").read_text(encoding="utf-8"))
+            path.write_bytes(pack_pdf(pack))
+        if name == "refusal.md" and not path.exists():
+            refusal = (self._case(session_id, run_id, run["case_id"]) or {}).get("refusal")
+            if refusal:
+                path.write_text(
+                    f"# {refusal['subject_line']}\n\n{refusal['body']}\n", encoding="utf-8", newline="\n"
+                )
         if not path.exists():
             raise WebError("no such file yet", 404)
         return path
@@ -432,7 +500,10 @@ class DeskService:
                 elif action == "request_changes":
                     reviewer.request_changes(s, actor, note)
                 elif action == "reject":
-                    reviewer.reject(s, actor, note or "rejected by the reviewer")
+                    reviewer.reject(s, actor, note)  # the note goes to the requester, in the refusal letter
+                elif action == "send_refusal":
+                    message_id = reviewer.send_refusal(s, actor)
+                    note = f"refusal letter sent (message {message_id})"
                 elif action == "extend":
                     reviewer.extend(s, actor, note)
                 else:

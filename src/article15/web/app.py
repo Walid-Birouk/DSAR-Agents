@@ -32,7 +32,7 @@ class StartRun(BaseModel):
     customer_id: str | None = None
     subject: str = Field(default="", max_length=200)
     text: str = Field(default="", max_length=4000)
-    source: str = Field(default="preset", pattern="^(preset|visitor|break)$")
+    source: str = Field(default="preset", pattern="^(preset|visitor|break|story)$")
     challenge: str = ""
     nonce: str = ""
 
@@ -69,6 +69,15 @@ def create_app(cfg: WebConfig, frontend: Path | None = FRONTEND) -> FastAPI:
     )
     app.state.service = service
 
+    @app.middleware("http")
+    async def no_caching_of_the_api(request: Request, call_next: Any) -> Response:
+        # Every API answer belongs to one visitor's session: no CDN or proxy may keep it (a CDN in front, such
+        # as a Vercel rewrite, honours the upstream Cache-Control).
+        response: Response = await call_next(request)
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
     @app.exception_handler(WebError)
     async def web_error(_: Request, exc: WebError) -> JSONResponse:
         return JSONResponse({"error": str(exc)}, status_code=exc.status)
@@ -83,7 +92,9 @@ def create_app(cfg: WebConfig, frontend: Path | None = FRONTEND) -> FastAPI:
         if not sid or not service.store.has_session(sid):
             sid = secrets.token_urlsafe(18)
             service.store.add_session(sid)
-            response.set_cookie(COOKIE, sid, httponly=True, samesite="lax", max_age=24 * 3600)
+            response.set_cookie(
+                COOKIE, sid, httponly=True, samesite="lax", secure=cfg.secure_cookies, max_age=24 * 3600
+            )
         return sid
 
     @app.get("/api/health")
@@ -98,6 +109,14 @@ def create_app(cfg: WebConfig, frontend: Path | None = FRONTEND) -> FastAPI:
     def customers() -> list[dict[str, Any]]:
         return service.customers()
 
+    @app.get("/api/harness")
+    def harness() -> dict[str, Any]:
+        return service.harness()
+
+    @app.get("/api/story")
+    def story() -> dict[str, Any]:
+        return service.story()
+
     @app.get("/api/presets")
     def presets(kind: str = "try") -> list[dict[str, Any]]:
         return service.presets(break_it=kind == "break")
@@ -107,7 +126,7 @@ def create_app(cfg: WebConfig, frontend: Path | None = FRONTEND) -> FastAPI:
         visitor = None
         if body.customer_id:
             visitor = Visitor(body.customer_id, body.subject, body.text)
-        elif not body.case_id:
+        elif not body.case_id and body.source != "story":
             raise HTTPException(400, "give a prepared case_id, or a customer_id and your text")
 
         def admit() -> None:

@@ -1,0 +1,61 @@
+{
+  "case_id": "A15-098",
+  "final_state": "AWAITING_APPROVAL",
+  "pause": "awaiting_approval",
+  "stop_reason": "completed",
+  "error": null,
+  "states": [
+    "INTAKE_DONE",
+    "IDENTITY_CHECK",
+    "IDENTITY_VERIFIED",
+    "AWAITING_REQUESTER",
+    "IDENTITY_VERIFIED",
+    "DISCOVERY_DONE",
+    "REDACTION_DONE",
+    "DRAFT_READY",
+    "VALIDATED",
+    "AWAITING_APPROVAL"
+  ],
+  "pack_hash": "f64df6ab7abc55656ada12cd548f5b684349e1fc06ecf5159fcf30c8b02cd0ad",
+  "follow_ups": 0,
+  "tool_calls": [
+    "case_submit_intake:ok",
+    "crm_check_identity:ok",
+    "case_submit_identity:ok",
+    "crm_get_customer:ok",
+    "orders_search:ok",
+    "helpdesk_search_tickets:ok",
+    "weblogs_search_events:ok",
+    "helpdesk_read_ticket:ok",
+    "case_request_address_link:ok",
+    "helpdesk_search_tickets:ok",
+    "crm_get_customer:ok",
+    "orders_search:ok",
+    "weblogs_search_events:ok",
+    "case_submit_discovery:ok",
+    "case_submit_redaction:ok",
+    "case_submit_letter:ok",
+    "case_read_pack:ok",
+    "case_submit_validation:ok"
+  ],
+  "totals": {
+    "calls": 12,
+    "input_tokens": 154780,
+    "cache_hit_tokens": 147584,
+    "output_tokens": 5367,
+    "reasoning_tokens": 0,
+    "cost_usd": 0.004742
+  },
+  "policy_version": "1.0.0",
+  "prompt_hash": "5544dfe99be6261d",
+  "model": "deepseek-flash",
+  "thinking": "off",
+  "max_output_tokens": 8192,
+  "arm": "single",
+  "shadow": true,
+  "guard_would_block": [
+    "R-OTHERS case.redaction_verified"
+  ],
+  "elapsed_s": 31.45,
+  "fingerprint": "4798adc76b3e928bbfeef7f31e430036f54d2324ff2ced5e900ad377ef05537f"
+}

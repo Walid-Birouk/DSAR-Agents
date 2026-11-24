@@ -104,6 +104,28 @@ def _edge_cases(case: Case, target: CaseState, ctx: GuardContext) -> str | None:
     return None
 
 
+@guard("case.repeat_request_needs_a_person", "R-EXCESSIVE", S.IDENTITY_VERIFIED)
+def _repeat_request(case: Case, target: CaseState, ctx: GuardContext) -> str | None:
+    # The flag is set by code from the CRM's earlier requests, so a model that does not notice the repetition
+    # (or is told by the request text that it is the first one) cannot skip the person.
+    if case.flags.repeat_request and case.human_decision is None:
+        return (
+            "earlier access requests in the last 12 months: a person decides whether this one is excessive "
+            "before it is processed"
+        )
+    return None
+
+
+@guard("case.large_request_needs_a_person", "R-DEADLINE", S.IDENTITY_VERIFIED)
+def _large_request(case: Case, target: CaseState, ctx: GuardContext) -> str | None:
+    if case.flags.large_request and case.human_decision is None and not case.extension_reason:
+        return (
+            "a very large history: a person decides whether the deadline is extended (Art. 12(3)) before it "
+            "is processed"
+        )
+    return None
+
+
 @guard("case.identity_verified", "R-IDENTITY", S.IDENTITY_VERIFIED)
 def _identity(case: Case, target: CaseState, ctx: GuardContext) -> str | None:
     d = case.identity
@@ -195,6 +217,8 @@ def _extension(case: Case, target: CaseState, ctx: GuardContext) -> str | None:
 def _rejection(case: Case, target: CaseState, ctx: GuardContext) -> str | None:
     if not case.rejection_reason:
         return "a rejection needs a recorded reason (the requester must be told why)"
+    if case.refusal is None or not case.refusal.explains_refusal():
+        return "a rejection needs the Art. 12(4) letter: the reasons, the complaint and the judicial remedy"
     return None
 
 

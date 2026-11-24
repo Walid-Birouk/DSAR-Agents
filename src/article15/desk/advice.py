@@ -38,7 +38,7 @@ class NoArguments(Strict):
     pass
 
 
-async def _earlier_requests(session: CaseSession) -> tuple[int, int | None]:
+async def earlier_requests(session: CaseSession) -> tuple[int, int | None]:
     """Earlier data-protection requests in the 12 months before this one, and days since the latest. Needs
     the subject grant (identity verified); before that, nothing is known."""
     if session.case.identity is None or session.case.identity.subject_id is None:
@@ -63,13 +63,12 @@ async def _earlier_requests(session: CaseSession) -> tuple[int, int | None]:
 async def build_summary(session: CaseSession, question: Question) -> CaseSummary:
     c = session.case
     intake = c.intake
-    count, since = await _earlier_requests(session)
+    count, since = await earlier_requests(session)
     if c.discovery is not None:
         keys = [(r.system, r.table, r.record_id) for r in c.discovery.records]
     elif c.identity is not None and c.identity.subject_id is not None:
-        if session.scope is None:
-            session.scope = await packing.scope_index(session.hub)
-        keys = list(session.scope)
+        # Not cached on the session: proof of control can add records before discovery is submitted.
+        keys = list(session.scope if session.scope is not None else await packing.scope_index(session.hub))
     else:
         keys = []
     systems = {k[0] for k in keys}
@@ -102,27 +101,39 @@ def never_values(session: CaseSession) -> list[str]:
     return [v for v in values if len(v) >= 3]
 
 
+class Unavailable(Exception):
+    """The advisor could not be consulted (switched off, breaker open or failing: tier T2)."""
+
+
+async def consult(
+    session: CaseSession, client: AdvisorClient | None, breaker: CircuitBreaker, question: Question
+) -> Advice:
+    """Ask the advisor one question about the case; the advice also goes into the case file. Raises
+    `EgressRefused` when the summary would carry personal data, `Unavailable` when there is no advisor."""
+    if client is None or not breaker.allow():
+        raise Unavailable("the DPO advisor is not available (tier T2)")
+    try:
+        summary = await build_summary(session, question)
+        advice: Advice = await client.consult(summary, never_values(session))
+    except AdvisorError as exc:
+        breaker.record(False)
+        raise Unavailable(str(exc)) from exc
+    breaker.record(True)
+    session.update(advice=[*session.case.advice, advice])
+    return advice
+
+
 def build_advisor_tools(
     session: CaseSession, client: AdvisorClient | None, breaker: CircuitBreaker
 ) -> list[Tool]:
     def make(question: Question) -> Callable[[NoArguments], Awaitable[ToolResult]]:
-        async def consult(_: NoArguments) -> ToolResult:
-            if client is None or not breaker.allow():
-                return error_result(
-                    "unavailable",
-                    "the DPO advisor is not available (tier T2); hand the case to a person with "
-                    "case_escalate",
-                )
+        async def consult_tool(_: NoArguments) -> ToolResult:
             try:
-                summary = await build_summary(session, question)
-                advice: Advice = await client.consult(summary, never_values(session))
+                advice = await consult(session, client, breaker, question)
             except EgressRefused as exc:
                 return error_result("refused", str(exc))
-            except AdvisorError as exc:
-                breaker.record(False)
+            except Unavailable as exc:
                 return error_result("unavailable", f"{exc}; hand the case to a person with case_escalate")
-            breaker.record(True)
-            session.update(advice=[*session.case.advice, advice])
             return ToolResult(
                 text=f"Advice ({advice.recommendation.value}): "
                 + "; ".join(advice.reasons)
@@ -130,8 +141,11 @@ def build_advisor_tools(
                 "when you call case_escalate."
             )
 
-        return consult
+        return consult_tool
 
+    # Code consults too: when its own checks send a case to a person (case_tools.triage), the person gets
+    # the advice with the reason.
+    session.consult = lambda question: consult(session, client, breaker, question)
     return [
         FunctionTool(f"advisor_{q.value}", DESCRIPTIONS[q], NoArguments, make(q), timeout_s=30.0)
         for q in Question

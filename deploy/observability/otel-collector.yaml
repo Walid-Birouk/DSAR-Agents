@@ -11,13 +11,14 @@ processors:
   redaction:
     allow_all_keys: true
     blocked_values:
-      - "[\w.+-]+@[\w-]+(\.[\w-]+)+"
-      - "(\+\d{2}\s?|\b0)\d([\s.-]?\d{2}){4}\b"
+      # single quotes: YAML must not read the backslashes as escapes (validated with `otelcol validate`)
+      - '[\w.+-]+@[\w-]+(\.[\w-]+)+'
+      - '(\+\d{2}\s?|\b0)\d([\s.-]?\d{2}){4}\b'
     summary: info
   batch: {}
 
 exporters:
-  otlp/jaeger:
+  otlp_grpc/jaeger:
     endpoint: jaeger:4317
     tls:
       insecure: true
@@ -29,7 +30,7 @@ service:
     traces:
       receivers: [otlp]
       processors: [redaction, batch]
-      exporters: [otlp/jaeger]
+      exporters: [otlp_grpc/jaeger]
     metrics:
       receivers: [otlp]
       processors: [batch]

@@ -9,7 +9,7 @@ case pass guard `case.redaction_verified` (rule R-OTHERS).
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 
 from pydantic import Field
 
@@ -77,12 +77,29 @@ def find_all(text: str, quote: str) -> list[int]:
     return starts
 
 
+def _where(fields: Mapping[FieldKey, str], key: FieldKey) -> str:
+    """Where the text actually is, so the model can fix the address on its next call: the record's text
+    fields, or, for a helpdesk ticket, the messages that are records of their own."""
+    system, record_id, _ = key
+    own = sorted(f for s, r, f in fields if s is system and r == record_id and f != "ticket_id")
+    messages = sorted(
+        r for (s, r, f), v in fields.items() if s is System.HELPDESK and f == "ticket_id" and v == record_id
+    )
+    hints = [f"its text fields are: {', '.join(own)}"] if own else []
+    if messages:
+        hints.append(
+            f"{record_id} is a ticket: each of its messages is a record of its own, so use record_id "
+            f"{', '.join(messages)} with field 'body'"
+        )
+    return "".join(f"; {h}" for h in hints) or "; that record is not in the pack"
+
+
 def _locate(
     fields: Mapping[FieldKey, str], key: FieldKey, quote: str, occurrence: int | None
 ) -> tuple[list[tuple[int, int]], str | None]:
     system, record_id, field = key
     if key not in fields:
-        return [], f"{system.value} {record_id} has no text field '{field}' in the pack"
+        return [], f"{system.value} {record_id} has no text field '{field}' in the pack{_where(fields, key)}"
     starts = find_all(fields[key], quote)
     if not starts:
         return [], f"'{quote}' is not in {system.value} {record_id} {field} (quote it exactly as written)"
@@ -175,6 +192,63 @@ def verify(fields: Mapping[FieldKey, str], plan: RedactionPlan, language: Langua
 
 
 ORDER_REF = re.compile(r"\bFL-\d{6}\b")
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+PHONE = re.compile(r"(?<![\d])(?:\+33[\s.-]?|0)[1-9](?:[\s.-]?\d{2}){4}(?![\d])")
+
+
+def readable_staff(masked: Mapping[FieldKey, str], staff_names: Iterable[str]) -> list[str]:
+    """Policy v2 (E3): Ferlane's staff names must not be readable in the free text (their structured
+    `staff_name` field is masked by code). Returns where one still is."""
+    problems = []
+    for name in sorted(set(staff_names)):
+        for (system, record_id, field), text in masked.items():
+            if field != "staff_name" and name in text:
+                where = f"{system.value} {record_id} {field}"
+                problems.append(f"the staff name '{name}' is still readable in {where}")
+    return problems[:MAX_ERRORS]
+
+
+def _phone_key(number: str) -> str:
+    digits = re.sub(r"\D", "", number)
+    return "0" + digits[2:] if digits.startswith("33") and len(digits) == 11 else digits
+
+
+def own_contacts(fields: Mapping[FieldKey, str], verified_emails: Iterable[str]) -> tuple[set[str], set[str]]:
+    """The customer's own addresses and phone numbers: those the case verified (the grant's addresses), and
+    every field of their records that holds just an address or a number (the CRM's email and phone, a linked
+    guest order's email). Every record in the pack is the customer's, so those fields are theirs."""
+    emails = {e.strip().lower() for e in verified_emails}
+    phones: set[str] = set()
+    for text in fields.values():
+        value = text.strip()
+        if EMAIL.fullmatch(value):
+            emails.add(value.lower())
+        elif PHONE.fullmatch(value):
+            phones.add(_phone_key(value))
+    return emails, phones
+
+
+def foreign_contacts(masked: Mapping[FieldKey, str], own_emails: set[str], own_phones: set[str]) -> list[str]:
+    """Like foreign_order_numbers, for email addresses and phone numbers: one still readable in free text
+    that is not the customer's own is someone else's personal data (rule R-OTHERS). Found by experiment E2,
+    where an address planted by a prompt injection stayed readable and no check saw it (decision 0017).
+
+    It errs on the safe side: the customer's own second address, mentioned in a ticket but never confirmed
+    by proof of control, is hidden too, because an address planted in the customer's own message looks the
+    same."""
+    problems = []
+    for (system, record_id, field), text in sorted(masked.items()):
+        if EMAIL.fullmatch(text.strip()) or PHONE.fullmatch(text.strip()):
+            continue  # a field that holds only an address or a number is the customer's own (own_contacts)
+        found = [m.group(0) for m in EMAIL.finditer(text) if m.group(0).lower() not in own_emails]
+        found += [m.group(0) for m in PHONE.finditer(text) if _phone_key(m.group(0)) not in own_phones]
+        for value in sorted(set(found)):
+            problems.append(
+                f"'{value}' is readable in {system.value} {record_id} {field} but is not a verified "
+                "address or number of the customer, so it may be someone else's: hide it (category "
+                "third_party)"
+            )
+    return problems[:MAX_ERRORS]
 
 
 def foreign_order_numbers(masked: Mapping[FieldKey, str], own_orders: set[str]) -> list[str]:

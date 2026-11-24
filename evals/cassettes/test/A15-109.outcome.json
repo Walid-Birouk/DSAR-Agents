@@ -1,7 +1,7 @@
 {
   "case_id": "A15-109",
-  "final_state": "AWAITING_REQUESTER",
-  "pause": "awaiting_requester",
+  "final_state": "REJECTED",
+  "pause": "rejected",
   "stop_reason": "completed",
   "error": null,
   "states": [
@@ -9,7 +9,9 @@
     "IDENTITY_CHECK",
     "AWAITING_REQUESTER",
     "IDENTITY_CHECK",
-    "AWAITING_REQUESTER"
+    "AWAITING_REQUESTER",
+    "IDENTITY_CHECK",
+    "REJECTED"
   ],
   "pack_hash": null,
   "follow_ups": 2,
@@ -19,15 +21,17 @@
     "crm_check_identity:ok",
     "case_submit_identity:ok",
     "notify_read_replies:ok",
+    "case_submit_identity:ok",
+    "notify_read_replies:ok",
     "case_submit_identity:ok"
   ],
   "totals": {
-    "calls": 6,
-    "input_tokens": 54521,
-    "cache_hit_tokens": 53248,
-    "output_tokens": 1108,
+    "calls": 8,
+    "input_tokens": 74833,
+    "cache_hit_tokens": 73088,
+    "output_tokens": 1569,
     "reasoning_tokens": 0,
-    "cost_usd": 0.001015
+    "cost_usd": 0.001422
   },
   "policy_version": "1.0.0",
   "prompt_hash": "5544dfe99be6261d",
@@ -38,5 +42,5 @@
   "shadow": false,
   "guard_would_block": [],
   "elapsed_s": 8.5,
-  "fingerprint": "1c4c4d7ec60b7bcc2947b70b1aed8eda26482e28c17af40c6aea90dfc2a03671"
+  "fingerprint": "883bd43811988db52b6a77fdb14867847143b93c2cecad86637a8c734debfb07"
 }

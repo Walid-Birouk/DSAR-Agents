@@ -24,7 +24,7 @@ rules:
     action: extend_deadline
     effect: required
     applies_to: [coordinator, letter]
-    enforced_by: [case.extension_in_time]
+    enforced_by: [case.extension_in_time, case.large_request_needs_a_person]
     text: >-
       Answer without undue delay and within one month of receipt. The deadline is the same date in the
       following month, or the last day of that month if the date does not exist, moved to the next working day
@@ -98,6 +98,7 @@ rules:
     effect: forbidden
     applies_to: [redaction, validator]
     enforced_by: [case.redaction_verified]
+    redact: [third_party]
     text: >-
       The copy must not harm other people. Hide personal data about other customers and private individuals
       in free text, and record the reason for each redaction. Redact the affected parts; never refuse the
@@ -109,7 +110,7 @@ rules:
     action: refuse_or_charge
     effect: requires_human_decision
     applies_to: [intake, coordinator, advisor]
-    enforced_by: [case.edge_cases_need_a_person]
+    enforced_by: [case.edge_cases_need_a_person, case.repeat_request_needs_a_person]
     text: >-
       A request that may be manifestly unfounded or excessive, for example repetitive, and any request for
       other rights such as erasure, goes to a person. These concepts are read narrowly, and the company carries

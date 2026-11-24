@@ -17,8 +17,14 @@ Evals and experiments: see the README.
 
 ## On a server (the public demo)
 
-One small EU virtual server is enough (PLAN.md 15.2). These steps have not been run yet: they need the owner's
-server account and domain.
+One small EU virtual server is enough (PLAN.md 15.2). These steps have not been run on a server yet: they need
+a server account and a domain.
+- **What has been checked locally (2026-11-23):**
+  - the image builds and its container starts read-only, as user 10015, and answers `/api/health`;
+  - Compose, Caddy, the collector and Prometheus accept their configs;
+  - the observability stack received and stored a case's trace.
+- **CI repeats those checks** on every push (`.github/workflows/ci.yml`, jobs `image` and `deploy-config`).
+- **A version tag** (`v0.1.0`) publishes the image to `ghcr.io/<owner>/<repo>` (`release.yml`).
 
 1. A Debian or Ubuntu server with Docker Engine and the Compose plugin, a non-root user in the `docker` group, and
    a firewall that allows 22, 80 and 443 only.
@@ -35,6 +41,40 @@ server account and domain.
    `A15_OTLP_ENDPOINT` for the app and reach Jaeger and Grafana over an SSH tunnel
    (`ssh -L 16686:127.0.0.1:16686 -L 3000:127.0.0.1:3000 server`).
 7. Set a spending limit on the provider account as well. The app's own cap is EUR 2 a day (decision D4).
+
+## The frontend on Vercel, the backend on the server
+
+The web app is static, so Vercel can serve it (`frontend/vercel.json`: Vite build, SPA fallback, the same
+security headers as Caddy). The API, the live runs and the sandboxes stay on the server above.
+
+**Before a backend is linked**, the Vercel site:
+- shows the first page from the recorded runs (`frontend/public/harness.json`, written by `a15 eval harness`);
+- says that the live desk is not connected; Try it, Break it and Follow a request need it.
+
+**To link it**, keep the browser on one origin, so the session cookie stays first-party and the CSP's
+`connect-src 'self'` holds. Add a rewrite before the SPA fallback in `frontend/vercel.json`:
+
+```json
+"rewrites": [
+  { "source": "/api/:path*", "destination": "https://api.your-domain.example/api/:path*" },
+  { "source": "/((?!api/).*)", "destination": "/index.html" }
+]
+```
+
+**What Vercel's documentation does and does not settle** (read on 2026-11-23, vercel.com/docs/rewrites):
+- **Stated:**
+  - an external rewrite proxies the request ("without changing the URL in the browser");
+  - Vercel honours the upstream's `Cache-Control`. The app sends `Cache-Control: no-store` on every `/api/`
+    answer, so no visitor's data is cached.
+- **Not stated:** whether a rewrite streams server-sent events, how long it may stay open, and whether it
+  passes `Set-Cookie`. So:
+  - the run view falls back to polling when the event stream drops;
+  - after linking, check that a run's steps appear live and that the session cookie is set.
+
+  If the cookie does not pass, serve the whole app from the server (Caddy) instead; that path needs no proxy.
+
+On the server, set `A15_SECURE_COOKIES=1` (HTTPS-only session cookie) and `A15_TRUST_PROXY=1`, so the client
+address comes from `X-Forwarded-For`.
 
 ## Replacing the fictional company
 

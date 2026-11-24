@@ -198,3 +198,57 @@ class ReplayProvider:
     def unused(self) -> int:
         """Recorded calls that were never asked for (a replay that stopped early)."""
         return len(self.calls) - len(self._used)
+
+    def used_prefix(self) -> int | None:
+        """How many calls were used, when they are exactly the first ones (a replay that stopped early
+        because code now stops the case sooner); None when the use has gaps."""
+        n = len(self._used)
+        return n if self._used == set(range(n)) else None
+
+
+class ContinuingProvider:
+    """Re-records a case after a code change without re-running what did not change: it returns the recorded
+    responses while each request is exactly the next recorded one, and from the first request that differs it
+    calls the live model, and stays live. Wrapped in a `RecordingProvider`, the new cassette holds the
+    recorded calls up to that point and the live ones after it, so the model's earlier behaviour (a slip a
+    guard caught, say) is kept and only the changed tail is paid for."""
+
+    def __init__(self, path: Path, live: Provider) -> None:
+        self.name = live.name
+        self.calls = load_requests(path)  # read before a recorder writes to the same path
+        self.live = live
+        self._next = 0
+        self.live_from: int | None = None
+
+    async def complete(self, request: ModelRequest) -> ModelResponse:
+        if self.live_from is None and self._next < len(self.calls):
+            recorded, response = self.calls[self._next]
+            if recorded.digest() == request.digest():
+                self._next += 1
+                return response
+        if self.live_from is None:
+            self.live_from = self._next
+        return await self.live.complete(request)
+
+
+def trim_cassette(path: Path, keep: int) -> int:
+    """Keep only the first `keep` recorded calls of a cassette (and the tool lists they use). Calls store only
+    the messages added since the previous call, so dropping calls from the end leaves the rest intact.
+    Returns how many calls were dropped."""
+    entries: list[dict[str, Any]] = []
+    dropped = 0
+    with path.open(encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            raw = json.loads(line)
+            if raw["kind"] == "call" and raw["index"] >= keep:
+                dropped += 1
+                continue
+            entries.append(raw)
+    used_tools = {e["tools_digest"] for e in entries if e["kind"] == "call"}
+    entries = [e for e in entries if e["kind"] != "tools" or e["digest"] in used_tools]
+    with path.open("w", encoding="utf-8", newline="\n") as f:
+        for e in entries:
+            f.write(canonical_json(e) + "\n")
+    return dropped

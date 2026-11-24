@@ -21,6 +21,7 @@ the eval's leak test can scan it), and OTLP to the private collector when A15_OT
 
 from __future__ import annotations
 
+import atexit
 import hashlib
 import hmac
 import json
@@ -32,6 +33,7 @@ from typing import Any
 
 from opentelemetry import trace
 from opentelemetry.metrics import Meter
+from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -175,6 +177,9 @@ class OtelSink:
                 self.instruments.transitions.add(
                     1, {"status": str(attrs.get("status")), "to": str(attrs.get("to_state"))}
                 )
+        elif name == "advisor.consult":
+            assert self._case is not None
+            self._case.add_event("advisor.consult", self._attrs(attrs))
         elif name == "error.occurred":
             self._parent().add_event("error.occurred", self._attrs(attrs))
             if self.instruments is not None:
@@ -201,10 +206,35 @@ class TeeSink:
             s.emit(name, **attrs)
 
 
+_PROCESS_INSTRUMENTS: Instruments | None = None
+
+
+def process_instruments(endpoint: str) -> Instruments:
+    """The metrics of the whole process, exported to the collector every 15 s and on exit. Unlike a trace,
+    a metric outlives a case, so there is one meter provider per process, not per case."""
+    global _PROCESS_INSTRUMENTS
+    if _PROCESS_INSTRUMENTS is None:
+        from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+        from opentelemetry.sdk.metrics import MeterProvider
+        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+
+        reader = PeriodicExportingMetricReader(
+            OTLPMetricExporter(endpoint=endpoint.rstrip("/") + "/v1/metrics"), export_interval_millis=15_000
+        )
+        provider = MeterProvider(resource=RESOURCE, metric_readers=[reader])
+        atexit.register(provider.shutdown)  # flushes what the last interval collected
+        _PROCESS_INSTRUMENTS = Instruments(provider.get_meter("article15"))
+    return _PROCESS_INSTRUMENTS
+
+
+# How the desk shows up in Jaeger and Grafana (without it, the SDK reports "unknown_service:python").
+RESOURCE = Resource.create({"service.name": "article15-desk", "service.namespace": "article15"})
+
+
 def case_tracing(extra_processors: Iterable[Any] = ()) -> tuple[TracerProvider, InMemorySpanExporter]:
     """A tracer provider for one case run: spans kept in memory (for spans.jsonl) and sent to any extra
     processors (OTLP to the collector)."""
-    provider = TracerProvider()
+    provider = TracerProvider(resource=RESOURCE)
     memory = InMemorySpanExporter()
     provider.add_span_processor(SimpleSpanProcessor(memory))
     for p in extra_processors:

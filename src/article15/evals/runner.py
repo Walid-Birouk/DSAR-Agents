@@ -30,7 +30,7 @@ from typing import Any
 
 import anyio
 
-from article15.company.models import CaseTruth, RequestCase
+from article15.company.models import CaseTruth, RequestCase, SpanCategory
 from article15.company.store import DataPaths, load_cases, load_people
 from article15.core.provider import Provider
 from article15.desk import prompts
@@ -41,11 +41,12 @@ from article15.evals.graders import CaseGrade, GradingContext, grade_case
 from article15.evals.judge import JUDGE_CAPS
 from article15.evals.oracle import ScriptedProvider, oracle, team_agents, team_script
 from article15.evals.report import Report, RunInfo, build
+from article15.policy.models import Policy
 
 ProviderFor = Callable[[str, int], Provider]
 """(case ID, run number) -> the provider for that case."""
-JudgeFn = Callable[[str, Path, int], Awaitable[tuple[dict[str, float] | None, float]]]
-"""(case ID, case run directory, run number) -> (letter scores or None, the judge's cost in USD)."""
+JudgeFn = Callable[[str, Path, int], Awaitable[tuple[dict[str, float] | None, str, float]]]
+"""(case ID, case run directory, run number) -> (letter scores or None, the judge's notes, its cost, USD)."""
 
 
 class EvalError(Exception):
@@ -67,6 +68,9 @@ class EvalConfig:
     expected_fingerprints: dict[str, str] = field(
         default_factory=dict
     )  # replay: what each case must reproduce
+    # replay: each case's wall time when it was recorded live, so latency in a replay's report is the live one
+    # (a replay itself answers in milliseconds)
+    recorded_elapsed_s: dict[str, float] = field(default_factory=dict)
 
     def key(self, policy_version: str, prompt_hash: str) -> dict[str, Any]:
         """The settings a resumed run must share with the run it continues."""
@@ -86,6 +90,11 @@ class EvalConfig:
         }
 
 
+def redact_categories(policy: Policy) -> frozenset[SpanCategory]:
+    """The truth's span categories a pack must hide under `policy` (R-OTHERS; staff from v2, E3)."""
+    return frozenset(SpanCategory(k.value) for k in policy.redact)
+
+
 @dataclass
 class EvalResult:
     report: Report
@@ -100,7 +109,13 @@ def oracle_provider_for(data: DataPaths, desk: Desk, arm: str = "single") -> Pro
 
     def provider_for(case_id: str, run: int) -> Provider:
         truth = ctx_truths[case_id]
-        script = oracle(truth, requests[case_id], desk.register, names[truth.requester.person_id])
+        script = oracle(
+            truth,
+            requests[case_id],
+            desk.register,
+            names[truth.requester.person_id],
+            redact=redact_categories(desk.policy),
+        )
         if arm == "team":
             return ScriptedProvider(team_script(script), agents=team_agents(desk.policy, desk.register))
         return ScriptedProvider(script)
@@ -117,12 +132,12 @@ async def run_eval(
     data = cfg.run.data
     root = cfg.run.out_dir
     requests: dict[str, RequestCase] = {c.case_id: c for c in load_cases(data)}
-    grading = grading or GradingContext.load(data)
+    desk = Desk.load(load_people(data), cfg.run.policy_path)
+    grading = grading or GradingContext.load(data, redact_categories=redact_categories(desk.policy))
     truths: dict[str, CaseTruth] = grading.truths
     unknown = [c for c in cfg.case_ids if c not in requests]
     if unknown:
         raise EvalError(f"unknown case(s): {', '.join(unknown)}")
-    desk = Desk.load(load_people(data))
     prompt_hash = (
         team_prompts_hash(desk.policy, desk.register)
         if cfg.run.arm == "team"
@@ -187,9 +202,17 @@ async def run_eval(
                         mismatches.append(f"run {n} {case_id}")
                     case_dir = run_cfg.out_dir / case_id
                     g = grade_case(case_dir, grading)
+                    if case_id in cfg.recorded_elapsed_s:
+                        g = g.model_copy(update={"elapsed_s": cfg.recorded_elapsed_s[case_id]})
                     if judge is not None and g.letter:
-                        scores, judge_cost = await judge(case_id, case_dir, n)
-                        g = g.model_copy(update={"letter_scores": scores, "judge_cost_usd": judge_cost})
+                        scores, notes, judge_cost = await judge(case_id, case_dir, n)
+                        g = g.model_copy(
+                            update={
+                                "letter_scores": scores,
+                                "letter_notes": notes,
+                                "judge_cost_usd": judge_cost,
+                            }
+                        )
                     (case_dir / "grade.json").write_text(
                         g.model_dump_json(indent=2) + "\n", encoding="utf-8", newline="\n"
                     )

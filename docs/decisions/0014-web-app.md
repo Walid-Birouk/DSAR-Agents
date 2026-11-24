@@ -1,8 +1,7 @@
 # 0014: The web app
 
-**Status: provisional.** Made on 2026-11-21/22 while the project owner was away, to be confirmed or changed
-(see [pending-review.md](pending-review.md), P30 to P39). The choices the plan leaves open are marked
-*(open choice)*.
+**Status: accepted** on 2026-11-23, after starting as provisional choices ([0018](0018-provisional-choices-settled.md)
+says what changed).
 
 **Decision.** M6 builds the web app of PLAN.md 11 on the stack of decision 0007: a FastAPI backend
 (`src/article15/web/`, `a15 web`) and a React app (`frontend/`).

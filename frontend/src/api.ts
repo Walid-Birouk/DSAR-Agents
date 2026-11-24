@@ -22,6 +22,7 @@ export type RunRow = {
   state: string | null;
   created_at: string;
   cost_usd: number;
+  error?: string | null;
 };
 
 export type ToolEntry = {
@@ -55,7 +56,8 @@ export type RunDetail = {
     letter: { subject_line: string; body: string } | null;
     advice: { recommendation: string; reasons: string[]; sources: string[] }[];
     rejection_reason: string | null;
-    flags: { special_category_found: boolean };
+    refusal: { kind: string; language: string; subject_line: string; body: string } | null;
+    flags: { special_category_found: boolean; repeat_request?: boolean; large_request?: boolean };
   } | null;
   outcome: { totals: Record<string, number>; stop_reason: string; elapsed_s: number } | null;
   pack: {
@@ -67,6 +69,7 @@ export type RunDetail = {
   tools: ToolEntry[];
   audit: AuditRow[];
   can_review: boolean;
+  can_send_refusal: boolean;
   special_category: boolean;
 };
 
@@ -106,6 +109,111 @@ export type EvalSummary = {
   cost: number;
 };
 
+export type ForeignRecord = {
+  system: string;
+  table: string;
+  record_id: string;
+  owner: string | null;
+  owner_is_customer: boolean;
+  fields: Record<string, unknown>;
+};
+
+export type Mention = { system: string; record_id: string; field: string; text: string; note: string; context: string };
+
+export type Story = {
+  case_id: string;
+  subject: string;
+  request: { sender: string; subject_line: string; text: string; received_on: string };
+  due: string;
+  records_by_system: Record<string, number>;
+  records_total: number;
+  gloss: Record<string, string>;
+  naive: {
+    broken_versions: string[];
+    records_total: number;
+    records_own: number;
+    foreign_records: ForeignRecord[];
+    readable_mentions: Mention[];
+  };
+  recorded: { available: boolean; model: string | null; elapsed_s: number | null; cost_usd: number | null; model_calls: number | null };
+  mode: "replay" | "scripted";
+};
+
+export type GuardInfo = { id: string; title: string; rules: string[]; code: string; what: string };
+export type Catch = { run: string; case_id: string; kind: string; tool: string; attempt: string; refusal: string };
+export type E2Arm = {
+  run: string;
+  cases: number;
+  third_party_leaks: number;
+  foreign_records: number;
+  impostor_accepted: number;
+  injection_succeeded: number;
+  released_without_approval: number;
+  violations_let_through: number;
+  violations_refused: number;
+  cases_with_violation_at_approval: number;
+  passed: number;
+  cost_usd: number;
+  reruns?: string[];
+};
+export type Harness = {
+  guards: GuardInfo[];
+  catches: {
+    runs: string[];
+    cases: number;
+    distinct_requests: number;
+    tool_calls: number;
+    model_refusals: number;
+    cases_with_a_refusal: number;
+    by_guard: Record<string, { count: number; cases: number; examples: Catch[] }>;
+  };
+  cost: {
+    run: string;
+    model: string;
+    cases: number;
+    cost_per_case_usd: number;
+    model_calls_per_case: number;
+    tool_calls_per_case: number;
+    input_tokens_per_case: number;
+    output_tokens_per_case: number;
+    elapsed_p50_s: number;
+  };
+  scaling?: {
+    run: string;
+    cases: number;
+    cost_per_record_usd: number;
+    input_tokens_per_record: number;
+    cache_hit_share: number;
+    input_token_cap: number;
+    records_before_cap: number;
+    scenarios: { id: string; provider: string; model: string; peak_or_eu: boolean }[];
+    rows: {
+      records: number;
+      measured: { cost_usd: number; input_tokens?: number; case_id?: string; average?: boolean } | null;
+      input_tokens: number;
+      over_cap: boolean;
+      cost_usd: Record<string, number>;
+    }[];
+  } | null;
+  e2?: {
+    cases_planned: number;
+    rows: { key: string; label: string }[];
+    shadow: E2Arm;
+    guarded: E2Arm;
+    let_through: {
+      case_id: string;
+      kind: string;
+      third_party_leaks: number;
+      foreign_records: number;
+      would_block: number;
+      rules: string[];
+      category: "leak_caught" | "leak_missed" | "procedure" | "harmless";
+      now_flagged?: string[];
+      final_state: string;
+    }[];
+  };
+};
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, { credentials: "same-origin", ...init });
   const body = await r.json().catch(() => ({}));
@@ -118,6 +226,14 @@ const post = <T,>(path: string, body: unknown) =>
 
 export const api = {
   system: () => call<System>("/api/system"),
+  story: () => call<Story>("/api/story"),
+  // The first page works without the backend: a static copy of the same summary ships with the web app.
+  harness: () => call<Harness>("/api/harness").catch(() => call<Harness>("/harness.json")),
+  // Whether the live desk (the backend) is connected to this site.
+  connected: () =>
+    call<{ ok: boolean }>("/api/health")
+      .then((h) => h.ok === true)
+      .catch(() => false),
   presets: (kind: "try" | "break") => call<Preset[]>(`/api/presets?kind=${kind}`),
   customers: () => call<Customer[]>("/api/customers"),
   runs: () => call<RunRow[]>("/api/runs"),

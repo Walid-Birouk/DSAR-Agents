@@ -4,7 +4,8 @@ A person reviewing a pack at AWAITING_APPROVAL can:
 - approve it: code signs an approval over the case ID, the SHA-256 of the exact pack, the reviewer and the
   time (and whether they acknowledged special-category data);
 - request changes, with a note: the case goes back to DRAFT_READY for the agents;
-- reject it, with a reason;
+- reject it, with a reason written for the requester (code builds the Art. 12(4) letter, desk/refusal.py), and
+  then send that letter (`send_refusal`);
 - extend the deadline, with a reason (only within the first month);
 - escalate it to another person.
 
@@ -20,7 +21,10 @@ from article15.case.approvals import sign_approval
 from article15.case.machine import GuardFailure
 from article15.case.models import CaseState
 from article15.desk.pack import pack_bytes
+from article15.desk.pdf import pack_pdf
+from article15.desk.refusal import build_refusal
 from article15.desk.session import CaseSession, Pause, refusal
+from article15.schemas import Language
 
 S = CaseState
 
@@ -76,10 +80,34 @@ def request_changes(session: CaseSession, reviewer: str, note: str) -> None:
 
 
 def reject(session: CaseSession, reviewer: str, reason: str) -> None:
+    """Refuse the request. `reason` is written for the requester: it goes into the Art. 12(4) letter."""
     _require(session, S.AWAITING_APPROVAL)
-    session.update(rejection_reason=reason)
+    if not reason.strip():
+        raise ReviewRefused("a rejection needs a reason, written for the requester")
+    language = session.case.intake.language if session.case.intake else Language.FR
+    notice = build_refusal(session.case, session.register, language, by_reviewer=True, reason=reason)
+    session.update(rejection_reason=reason, refusal=notice)
     _advance(session, S.REJECTED, f"rejected by {reviewer}")
     session.pause = Pause.REJECTED
+
+
+def send_refusal(session: CaseSession, reviewer: str) -> int:
+    """Send the Art. 12(4) letter of a REJECTED case to the requester, then close the case. A person does it:
+    every reply, a refusal too, leaves only on a person's action (R-RELEASE-APPROVAL)."""
+    _require(session, S.REJECTED)
+    notice = session.case.refusal
+    if notice is None:
+        raise ReviewRefused("there is no refusal letter to send")
+    note = session.notifier.send(
+        session.case.case_id,
+        to=session.request.sender,
+        subject=notice.subject_line,
+        body=notice.body,
+        at=session.clock(),
+        op_id=f"refusal:{session.case.case_id}",
+    )
+    _advance(session, S.CLOSED, f"refusal sent by {reviewer}")
+    return note.message_id
 
 
 def extend(session: CaseSession, reviewer: str, reason: str) -> None:
@@ -104,7 +132,8 @@ def release(session: CaseSession) -> Released:
         session.case.case_id,
         to=session.request.sender,
         subject=letter.subject_line,
-        body=letter.body + f"\n\n[attachment: pack.json, {len(pack_bytes(session.pack))} bytes]",
+        body=letter.body + f"\n\n[attachments: pack.json ({len(pack_bytes(session.pack))} bytes), "
+        f"pack.pdf ({len(pack_pdf(session.pack))} bytes)]",
         at=session.clock(),
         op_id=f"release:{session.case.pack_hash}",
     )

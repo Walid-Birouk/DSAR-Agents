@@ -44,6 +44,8 @@ packages = ["src/article15"]
 [tool.ruff]
 line-length = 110
 target-version = "py312"
+# Local agent tooling (skills installed per machine), not project code.
+extend-exclude = [".agents", ".aider-desk", ".claude"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]

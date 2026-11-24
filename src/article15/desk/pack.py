@@ -16,8 +16,8 @@ from typing import Any
 
 from article15.case.approvals import pack_hash
 from article15.core.mcp_tools import McpHub
-from article15.desk.redaction import FieldKey, masked_fields
-from article15.schemas import Language, LetterDraft, RecordRef, RedactionPlan, System
+from article15.desk.redaction import MARKERS, FieldKey, masked_fields
+from article15.schemas import Language, LetterDraft, RecordRef, RedactionCategory, RedactionPlan, System
 
 PACK_VERSION = 1
 WEBLOG_PAGE = 500
@@ -112,10 +112,19 @@ def build_pack(
     refs: list[RecordRef],
     records: dict[RecordKey, PackRecord],
     plan: RedactionPlan,
+    hide_staff: bool = False,
 ) -> dict[str, Any]:
+    """`hide_staff` (policy v2, experiment E3): code also masks the structured `staff_name` field of helpdesk
+    messages, keeping the role; staff names in free text are the redaction agent's, checked by
+    `redaction.readable_staff`."""
     chosen = [records[(r.system, r.table, r.record_id)] for r in refs]
     chosen.sort(key=lambda r: sort_key(r.key))
     masked = masked_fields(text_fields(chosen), plan, language)
+    if hide_staff:
+        label = MARKERS[language][RedactionCategory.STAFF]
+        for r in chosen:
+            if r.system is System.HELPDESK and r.fields.get("staff_name"):
+                masked[(r.system, r.record_id, "staff_name")] = label
     copy = [
         {
             "system": r.system.value,

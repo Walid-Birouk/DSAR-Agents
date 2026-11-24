@@ -7,11 +7,12 @@ tool can tell the model which rule stopped it.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+from article15.advisor.models import Advice, Question
 from article15.case.machine import GuardContext, GuardFailure, Machine, TransitionRefused
 from article15.case.models import Case, CaseState
 from article15.company.models import RequestCase
@@ -63,6 +64,8 @@ class CaseSession:
     validation_rounds: int = 0
     shadow_log: list[GuardFailure] = field(default_factory=list)
     on_change: Callable[[CaseSession], None] | None = None  # the checkpoint hook (checkpoints.py)
+    # Code's own line to the DPO advisor (set by desk/advice.py), for the cases its checks send to a person
+    consult: Callable[[Question], Awaitable[Advice]] | None = None
 
     @property
     def state(self) -> CaseState:

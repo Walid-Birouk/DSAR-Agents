@@ -1,0 +1,39 @@
+{
+  "case_id": "A15-047",
+  "final_state": "NEEDS_HUMAN",
+  "pause": "with_a_person",
+  "stop_reason": "completed",
+  "error": null,
+  "states": [
+    "INTAKE_DONE",
+    "IDENTITY_CHECK",
+    "NEEDS_HUMAN"
+  ],
+  "pack_hash": null,
+  "follow_ups": 0,
+  "tool_calls": [
+    "case_get_status:ok",
+    "case_submit_intake:ok",
+    "crm_check_identity:ok",
+    "orders_check_reference:ok",
+    "case_submit_identity:ok"
+  ],
+  "totals": {
+    "calls": 4,
+    "input_tokens": 35587,
+    "cache_hit_tokens": 34560,
+    "output_tokens": 724,
+    "reasoning_tokens": 0,
+    "cost_usd": 0.000692
+  },
+  "policy_version": "2.0.0",
+  "prompt_hash": "4ffeacce00c015ad",
+  "model": "deepseek-flash",
+  "thinking": "off",
+  "max_output_tokens": 8192,
+  "arm": "single",
+  "shadow": false,
+  "guard_would_block": [],
+  "elapsed_s": 5.62,
+  "fingerprint": "996ca31ca0a1d07b4f7dd3990cb73e439cfa1fcb783a7602292bd8a2112c1b2b"
+}

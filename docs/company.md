@@ -33,7 +33,7 @@ Every entry names its source:
 - the CNIL cookies recommendation (web logs);
 - the CNIL complaint page.
 
-The project owner made Ferlane's own choices: no transfers outside the EEA, no automated decisions, and
+Ferlane's own choices, set for this project: no transfers outside the EEA, no automated decisions, and
 recipients named as categories. See [decision 0010](decisions/0010-agent-core-and-baseline.md).
 
 ## Built-in difficulties (PLAN.md 8.1)

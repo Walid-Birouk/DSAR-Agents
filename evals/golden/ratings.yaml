@@ -161,7 +161,7 @@ review:
     (independent of truth/owners.jsonl): records, due dates, redactions, special-category
     flags; identity and resolution read against the policy, case by case.'
   result: '20 of 20 labels right. One fix in the checker itself (web events of the
-    person''s own cookie belong to them). Two notes for the owner: staff-name redaction
+    person''s own cookie belong to them). Two notes: staff-name redaction
     is not in the text of R-OTHERS; A15-054 has a cosmetic pronoun quirk.'
   reviewer: automated review on 2026-11-22; not yet a
     person

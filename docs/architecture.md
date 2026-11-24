@@ -26,10 +26,12 @@ page maps the plan onto the code.
 | 5.3 Case lifecycle | `case/machine.py` (transitions and guards), `case/models.py` |
 | 5.4 MCP and A2A | `mcp_servers/`, `core/mcp_tools.py`, `scope/`; `advisor/` |
 | 5.5 Context design | stage tools and typed handoffs (`desk/case_tools.py`, `schemas.py`); code-built slices (`desk/team.py`) |
-| 5.6 Human approval | `desk/release.py`, `case/approvals.py`; the reviewer panel in the web app |
-| 6 Policy as code | `policy/policy.yaml`, `policy/render.py`, `policy/lint.py`; guards in `case/machine.py`, `scope/`, `advisor/egress.py` |
-| 7 Safety | scoped tools, claims cross-check (`desk/claims.py`), redaction verifier (`desk/redaction.py`), caps |
-| 8 Evaluation | `evals/` (suites, graders, metrics, judge, runner, reports, broken versions, experiments, golden 20) |
+| 5.6 Human approval | `desk/release.py`, `case/approvals.py`; the reviewer panel in the web app; the Art. 12(4) refusal letter (`desk/refusal.py`), sent by a person |
+| 5.3 Triage by code | right after identity: earlier requests and the size of the history send a case to a person, with the advisor's view (`desk/case_tools.py` `triage`; decision 0018) |
+| 6 Policy as code | `policy/policy.yaml` (v1) and `policy/policy-v2.yaml` (E3: staff names too), `policy/render.py`, `policy/lint.py`; guards in `case/machine.py`, `scope/`, `advisor/egress.py`; R-OTHERS's `redact` list drives the redaction verifier, the pack and the graders |
+| 7 Safety | scoped tools, claims cross-check (`desk/claims.py`, incl. a letter that speaks of its own approval), redaction verifier (`desk/redaction.py`: what the model hid, other customers' order numbers, emails, phones; staff names under v2), caps |
+| 11.1 The copy | `pack.json` and a PDF rendered from it with no library (`desk/pdf.py`; each page carries the pack hash) |
+| 8 Evaluation | `evals/` (suites, graders, metrics, judge, runner, reports, broken versions, experiments, golden 20); recordings kept in step with the code by `--rebaseline` and `--continue-from` (`core/replay.py`); committed reports in `evals/reports/` |
 | 9 Observability | `telemetry/otel.py`, `core/events.py`; `deploy/observability/` |
 | 10 Resilience | `core/resilience.py`, `core/live.py`, `desk/checkpoints.py`, operation IDs in `notifier/store.py` |
 | 11 Public demo | `web/` (service, guards, store, app), `frontend/`, `deploy/` |

@@ -170,8 +170,17 @@ ESCALATE_AFTER_IDENTITY = {
 }
 
 
-def _from_redaction(truth: CaseTruth, register: Register, chosen: list[dict[str, Any]]) -> Script:
-    """The oracle from the redaction stage on: read the tickets, redact, write the letter, validate."""
+THIRD_PARTY_ONLY = frozenset({SpanCategory.THIRD_PARTY})
+
+
+def _from_redaction(
+    truth: CaseTruth,
+    register: Register,
+    chosen: list[dict[str, Any]],
+    redact: frozenset[SpanCategory] = THIRD_PARTY_ONLY,
+) -> Script:
+    """The oracle from the redaction stage on: read the tickets, redact what the policy names (R-OTHERS:
+    staff too from v2), write the letter, validate."""
     language = truth.language
     tickets = [r["record_id"] for r in chosen if r["table"] == "tickets"]
     if tickets:
@@ -183,11 +192,11 @@ def _from_redaction(truth: CaseTruth, register: Register, chosen: list[dict[str,
             "record_id": s.record.record_id,
             "field": s.field,
             "text": s.text,
-            "category": "third_party",
+            "category": s.category.value,
             "reason": s.note,
         }
         for s in truth.redactions
-        if s.category is SpanCategory.THIRD_PARTY and s.record.record_id in in_pack
+        if s.category in redact and s.record.record_id in in_pack
     ]
     special = [
         {
@@ -227,6 +236,7 @@ def oracle(
     register: Register,
     sender_name: str,
     resume_at: str | None = None,
+    redact: frozenset[SpanCategory] = THIRD_PARTY_ONLY,
 ) -> Script:
     """A perfect single agent, reading only what its tools return, plus the truth for its judgments (who the
     subject is, what to redact, when a person must decide)."""
@@ -238,7 +248,7 @@ def oracle(
             yield [("case_get_status", {})]
             keys = sorted((k.system.value, k.table, k.record_id) for k in truth.records)
             chosen = [{"system": a, "table": b, "record_id": c} for a, b, c in keys]
-            yield from _from_redaction(truth, register, chosen)
+            yield from _from_redaction(truth, register, chosen, redact)
             return
         seen = yield [
             (
@@ -251,6 +261,7 @@ def oracle(
                     "claimed_name": sender_name,
                     "request_types": [t.value for t in truth.request_types],
                     "embedded_instructions_detected": truth.embedded_instructions,
+                    "on_behalf_of_someone_else": truth.kind is CaseKind.IDENTITY_REPRESENTATIVE,
                 },
             )
         ]
@@ -315,7 +326,9 @@ def oracle(
                         {
                             "ok": True,
                             "outcome": "REJECTED",
-                            "rejection_reason": "identity could not be established",
+                            "rejection_reason": "no written mandate from the person concerned"
+                            if truth.kind is CaseKind.IDENTITY_REPRESENTATIVE
+                            else "identity could not be established",
                             "confidence": 0.8,
                         },
                     )
@@ -395,7 +408,7 @@ def oracle(
                 },
             )
         ]
-        yield from _from_redaction(truth, register, chosen)
+        yield from _from_redaction(truth, register, chosen, redact)
 
     return gen()
 

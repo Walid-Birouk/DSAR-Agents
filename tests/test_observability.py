@@ -242,6 +242,49 @@ def test_with_the_advisor_off_edge_cases_go_straight_to_a_person(
         t.case_id for t in sorted(world.truths, key=lambda t: t.case_id) if t.kind is CaseKind.EDGE_REPEAT
     )
     outcome, _ = _run(world, data, desk, tmp_path, case_id, advisor="off")
+    # Code's own check (earlier requests in the CRM) sends it to a person right after identity, and says that
+    # the advisor could not be asked (tier T2).
     assert outcome.final_state is S.NEEDS_HUMAN
-    assert any(c.startswith("advisor_possibly_excessive:unavailable") for c in outcome.tool_calls)
+    case = json.loads((tmp_path / case_id / "case.json").read_text(encoding="utf-8"))
+    note = case["history"][-1]["note"]
+    assert "R-EXCESSIVE" in note and "advisor: the DPO advisor is not available (tier T2)" in note
     assert not (tmp_path / case_id / "advisor_payloads.jsonl").exists()
+
+
+def test_code_sends_repeat_and_very_large_requests_to_a_person_with_the_advice(
+    world: World, data: DataPaths, desk: Desk, tmp_path: Path
+) -> None:
+    # The model is never asked to notice: the flags come from the CRM and the scoped servers.
+    for kind, rule, question in (
+        (CaseKind.EDGE_REPEAT, "R-EXCESSIVE", "person_decides"),
+        (CaseKind.EDGE_EXTENSION, "R-DEADLINE", "extension_justified"),
+    ):
+        case_id = next(t.case_id for t in sorted(world.truths, key=lambda t: t.case_id) if t.kind is kind)
+        outcome, _ = _run(world, data, desk, tmp_path / kind.value, case_id)
+        assert outcome.final_state is S.NEEDS_HUMAN, kind
+        assert outcome.states[-1] is S.NEEDS_HUMAN and S.IDENTITY_VERIFIED not in outcome.states
+        case = json.loads((tmp_path / kind.value / case_id / "case.json").read_text(encoding="utf-8"))
+        assert rule in case["history"][-1]["note"] and question in case["history"][-1]["note"]
+        assert [a["recommendation"] for a in case["advice"]] == [question]
+        events = (tmp_path / kind.value / case_id / "events.jsonl").read_text(encoding="utf-8")
+        assert '"name": "advisor.consult"' in events and f'"recommendation": "{question}"' in events
+
+
+def test_with_an_otlp_endpoint_each_case_feeds_the_process_metrics(
+    desk: Desk, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The metrics pipeline (collector -> Prometheus -> alerts) only gets numbers if the case sink has them.
+    from article15.desk import runner
+
+    shared = object()
+    monkeypatch.setenv("A15_OTLP_ENDPOINT", "http://127.0.0.1:9")
+    monkeypatch.setattr(runner, "process_instruments", lambda endpoint: shared)
+    tracing = runner.open_tracing("A15-004", desk)
+    try:
+        assert tracing.sink.instruments is shared
+    finally:
+        tracing.provider.shutdown()
+    monkeypatch.delenv("A15_OTLP_ENDPOINT")
+    tracing = runner.open_tracing("A15-004", desk)
+    assert tracing.sink.instruments is None
+    tracing.provider.shutdown()

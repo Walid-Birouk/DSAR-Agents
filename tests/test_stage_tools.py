@@ -166,6 +166,38 @@ def test_a_foreign_record_cannot_enter_the_pack(
     play(world, data, desk, tmp_path, "A15-004", body)
 
 
+def test_a_discovery_list_that_leaves_out_a_returned_record_is_refused(
+    world: World, data: DataPaths, desk: Desk, tmp_path: Path
+) -> None:
+    # R-SCOPE in code (decision 0018): every record the scoped servers return for the person goes in the copy.
+    request, truth = _case(world, "A15-004")
+    own = [r for r in truth.records]
+    assert len(own) > 1
+
+    def refs(records: list) -> list[dict[str, str]]:  # type: ignore[type-arg]
+        return [
+            {"system": r.system.value, "table": r.table, "record_id": r.record_id, "reason": "the customer's"}
+            for r in records
+        ]
+
+    async def body(d: OpenDesk, call: Callable[..., Awaitable[ToolResult]]) -> None:
+        await call("case_submit_intake", **intake_args(request, truth))
+        await verify_by_email(call, truth)
+        args = {
+            "ok": True,
+            "subject_id": truth.subject_id,
+            "identifiers_used": ["x"],
+            "systems_searched": ["crm"],
+        }
+        r = await call("case_submit_discovery", records=refs(own[1:]), **args)
+        assert r.is_error and r.text.startswith("refused: R-SCOPE: 1 record(s)")
+        assert own[0].record_id in r.text and d.session.state is S.IDENTITY_VERIFIED
+        r = await call("case_submit_discovery", records=refs(own), **args)
+        assert not r.is_error and d.session.state is S.DISCOVERY_DONE
+
+    play(world, data, desk, tmp_path, "A15-004", body)
+
+
 def test_the_model_cannot_pass_its_own_token(
     world: World, data: DataPaths, desk: Desk, tmp_path: Path
 ) -> None:

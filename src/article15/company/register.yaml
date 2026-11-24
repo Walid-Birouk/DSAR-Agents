@@ -10,7 +10,7 @@
 #           https://www.cnil.fr/sites/default/files/2026-01/recommandation_cookies_consolidee.pdf
 #   PLAINTE CNIL, « Adresser une plainte », https://www.cnil.fr/fr/adresser-une-plainte
 #   GDPR    Regulation (EU) 2016/679
-#   D0010   Ferlane's own choices, made by the project owner (docs/decisions/0010-agent-core-and-baseline.md)
+#   D0010   Ferlane's own choices, set for this project (docs/decisions/0010-agent-core-and-baseline.md)
 
 version: 1
 controller:

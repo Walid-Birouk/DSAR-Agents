@@ -300,7 +300,7 @@ Case mix (160 cases):
 - 30 adversarial cases: injection in the request or in records, malformed or oversized input.
 
 Two further controls:
-- **Golden 20.** You review 20 cases by hand (about 2 hours) to confirm the generator's labels are right.
+- **Golden 20.** A person reviews 20 cases by hand (about 2 hours) to confirm the generator's labels are right.
 - **Dev/test split.** Prompts are tuned on the dev set, and only the held-out test set is reported.
 
 ### 8.2 Metrics and bars
@@ -333,7 +333,7 @@ left alone.
 
 - **Exact checks first:** set comparison for records, exact spans for redactions, date arithmetic for deadlines,
   a checklist for Art. 15(1), schema validation for handoffs, and order checks on traces.
-- **An LLM judge only for the letter's quality,** with a written rubric. The judge's scores are compared with your
+- **An LLM judge only for the letter's quality,** with a written rubric. The judge's scores are compared with a person's
   ratings on the golden 20 to check that it agrees with a person.
 
 ### 8.4 Trajectory checks (from traces)
@@ -414,8 +414,8 @@ A check that has never been seen to fail can't be trusted.
     stored spans.
   - **Public "System" page:** runs today, success rate, spend today against the daily cap, injections blocked,
     and the latest eval results.
-  - **You:** full Jaeger and Grafana, private, behind a login.
-- **Alerts** (to you): error rate above 5%, latency spikes, daily spend near the cap, a case near its deadline.
+  - **Operator:** full Jaeger and Grafana, private, behind a login.
+- **Alerts** (to the operator): error rate above 5%, latency spikes, daily spend near the cap, a case near its deadline.
 - **Audit log:** an append-only record of every stage, decision, approval and release: who, when, policy
   version, pack hash.
 
@@ -531,7 +531,7 @@ Times are focused days of building.
 - SDK versions pinned after checking their current documentation.
 - `policy.yaml` v1 with sources; schemas for policy, agents and handoffs.
 - The case state machine with tests.
-- Done when: CI is green, you have reviewed policy v1, and illegal transitions are rejected in tests.
+- Done when: CI is green, policy v1 has been reviewed, and illegal transitions are rejected in tests.
 
 **M1: fictional company and MCP servers (2.5 days)**
 - Seeded generator for customers, records, cases and correct answers, with the difficulties from 8.1.
@@ -553,7 +553,7 @@ Times are focused days of building.
 **M3: eval harness, before the real agents (3 days)**
 - Graders, metrics, and a runner that is parallel, resumable and budget-capped.
 - JSON and Markdown reports with comparison to a baseline.
-- Smoke (20) and full (160) suites with the dev/test split; the golden 20 sent to you.
+- Smoke (20) and full (160) suites with the dev/test split; the golden 20 sent for review.
 - First 3 broken-version tests.
 - CI runs unit tests and the replay smoke on every push.
 - Done when: a baseline report for the single agent exists and each broken version fails a hard gate.
@@ -580,10 +580,10 @@ Times are focused days of building.
 - Done when: the whole flow works locally in a browser and the Playwright tests pass.
 
 **M7: public deployment and launch (4 days)**
-- Server set-up, Compose deployment, HTTPS, backups, monitoring, alerts to you.
+- Server set-up, Compose deployment, HTTPS, backups, monitoring, alerts to the operator.
 - Rate limits, human check, daily spend cap, PII detector on input, privacy and AI notices.
 - Load test (for example 20 concurrent visitors) and a small public red-team round. Fix what it finds.
-- Full eval run on the test split, the 3-run spread, E3 and E4; README, video, eval report, CV lines.
+- Full eval run on the test split, the 3-run spread, E3 and E4; README, video, eval report.
 - Done when: the demo is live at a public URL, the hard gates pass, the spend cap and limits are tested, and the
   README links everything.
 
@@ -630,7 +630,7 @@ re-measured with real token counts in M2.
 | One EU virtual server for the whole stack | roughly EUR 5-15 per month, depending on size |
 | CDN/DNS layer | free tier |
 | Domain (optional) | about EUR 10-15 per year |
-| Daily model-spend cap for the public demo | your choice (decision D4) |
+| Daily model-spend cap for the public demo | set by the operator (decision D4) |
 
 ### 15.3 Provider prices and facts (official pages, read 2026-11-20)
 
@@ -710,7 +710,7 @@ https://docs.mistral.ai/inference/regional-inference)
 | D4 | Daily spend cap for the public demo | **Confirmed:** EUR 2 per day on the shared key. Past the cap, visitors can bring their own API key (section 11.3) | - |
 | D5 | Web app | React + TypeScript + Tailwind | Server-rendered pages (simpler, less polished) |
 | D6 | Hosting | One EU virtual server with Docker Compose | A platform service (Fly.io, Render, Railway) |
-| D7 | Domain | Your own domain | The host's free subdomain |
+| D7 | Domain | A dedicated domain | The host's free subdomain |
 | D8 | Request languages | French and English | English only |
 | D9 | Repository | Public on GitHub from the start, MIT licence | Private until launch |
 | D10 | Build size | **Confirmed:** full plan (~26 days) | - |
@@ -775,7 +775,7 @@ Sources:
 | Scope | Includes e.g. "history of purchases", "activity logs, search activities"; pseudonymised data is still personal data | EDPB |
 | Special categories | Racial or ethnic origin, political opinions, religious or philosophical beliefs, trade union membership, genetic data, biometric data for unique identification, health, sex life or sexual orientation | Art. 9(1) |
 
-## Appendix B: what you need to provide
+## Appendix B: external requirements
 
 - A DeepSeek API key and a Mistral API key (Mistral powers the public demo and is the fallback).
 - A spending limit on both provider accounts.

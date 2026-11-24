@@ -1,0 +1,34 @@
+{
+  "case_id": "A15-085",
+  "final_state": "NEEDS_HUMAN",
+  "pause": "with_a_person",
+  "stop_reason": "completed",
+  "error": null,
+  "states": [
+    "INTAKE_DONE",
+    "NEEDS_HUMAN"
+  ],
+  "pack_hash": null,
+  "follow_ups": 0,
+  "tool_calls": [
+    "case_submit_intake:ok"
+  ],
+  "totals": {
+    "calls": 1,
+    "input_tokens": 8518,
+    "cache_hit_tokens": 8192,
+    "output_tokens": 330,
+    "reasoning_tokens": 0,
+    "cost_usd": 0.000271
+  },
+  "policy_version": "2.0.0",
+  "prompt_hash": "4ffeacce00c015ad",
+  "model": "deepseek-flash",
+  "thinking": "off",
+  "max_output_tokens": 8192,
+  "arm": "single",
+  "shadow": false,
+  "guard_would_block": [],
+  "elapsed_s": 1.86,
+  "fingerprint": "79c1a12181e7483188b83dadfe4484428d892b726215ef55881624b7d9467451"
+}

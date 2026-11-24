@@ -34,12 +34,29 @@ export default function RunView() {
       const s = JSON.parse((e as MessageEvent).data) as Step;
       if (["case.transition", "tool.complete", "agent.start"].includes(s.name)) setSteps((prev) => [...prev, s]);
     });
+    let poll: number | undefined;
     es.addEventListener("done", () => {
       es.close();
       load();
     });
-    es.onerror = () => es.close();
-    return () => es.close();
+    // A proxy in front (a CDN rewrite) may not pass the live stream through: then poll until the run is over.
+    es.onerror = () => {
+      es.close();
+      if (poll !== undefined) return;
+      poll = window.setInterval(() => {
+        api
+          .run(id)
+          .then((d) => {
+            setDetail(d);
+            if (d.run.status === "done" || d.run.status === "failed") window.clearInterval(poll);
+          })
+          .catch(() => window.clearInterval(poll));
+      }, 2000);
+    };
+    return () => {
+      es.close();
+      if (poll !== undefined) window.clearInterval(poll);
+    };
   }, [id, load]);
 
   async function review(action: string) {
@@ -155,8 +172,12 @@ export default function RunView() {
               </>
             )}
             <p className="mt-2 text-sm">
+              <a className="text-indigo-700 underline" href={`/api/runs/${id}/files/pack.pdf`}>
+                Download the copy (PDF)
+              </a>{" "}
+              ·{" "}
               <a className="text-indigo-700 underline" href={`/api/runs/${id}/files/pack.json`}>
-                Download the pack (JSON)
+                the pack (JSON)
               </a>{" "}
               ·{" "}
               <a className="text-indigo-700 underline" href={`/api/runs/${id}/files/letter.md`}>
@@ -194,8 +215,51 @@ export default function RunView() {
         </section>
       )}
 
-      {c?.state === "REJECTED" && c.rejection_reason && (
-        <p className="rounded border border-slate-200 bg-white p-4">Rejected: {c.rejection_reason}</p>
+      {c?.state === "NEEDS_HUMAN" && c.history.length > 0 && (
+        <section aria-labelledby="with-a-person" className="rounded border border-amber-300 bg-amber-50 p-4 text-sm">
+          <h2 id="with-a-person" className="font-semibold">
+            With a person
+          </h2>
+          <p className="mt-1">{c.history[c.history.length - 1].note}</p>
+          {c.advice.length > 0 && (
+            <ul className="mt-2 list-disc pl-5">
+              {c.advice.map((a, i) => (
+                <li key={i}>
+                  DPO advisor ({a.recommendation.replace("_", " ")}): {a.reasons.join("; ")}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {(c?.state === "REJECTED" || c?.state === "CLOSED") && c.refusal && (
+        <section aria-labelledby="refusal" className="rounded border border-slate-200 bg-white p-4">
+          <h2 id="refusal" className="font-semibold">
+            The refusal letter (GDPR Art. 12(4))
+          </h2>
+          <p className="text-sm text-slate-700">
+            Written by code, not by a model: it gives the reason and how to go ahead, never confirms that an
+            account exists, and names the right to complain and to go to court.
+            {c.rejection_reason && <> Reason recorded on the case: {c.rejection_reason}</>}
+          </p>
+          <p className="mt-2 font-medium">{c.refusal.subject_line}</p>
+          <pre tabIndex={0} className="mt-1 max-h-96 overflow-auto whitespace-pre-wrap font-sans text-sm">
+            {c.refusal.body}
+          </pre>
+          {detail?.can_send_refusal ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => review("send_refusal")}
+              className="mt-3 rounded bg-indigo-700 px-4 py-2 font-medium text-white hover:bg-indigo-800 disabled:bg-slate-400"
+            >
+              Send the refusal letter
+            </button>
+          ) : (
+            c.state === "CLOSED" && <p className="mt-2 text-sm text-green-800">Sent to the requester.</p>
+          )}
+        </section>
       )}
 
       {detail?.can_review && (
@@ -213,7 +277,7 @@ export default function RunView() {
             </label>
           )}
           <label htmlFor="note" className="mt-3 block text-sm font-medium">
-            Note or reason (needed for changes, rejection and extension)
+            Note or reason (needed for changes, rejection and extension; a rejection's reason goes to the requester)
           </label>
           <textarea
             id="note"

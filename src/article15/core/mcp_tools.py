@@ -26,6 +26,23 @@ from article15.core.model import canonical_json
 from article15.core.tools import Tool, ToolResult, error_result, flatten_schema
 
 TOKEN_ARG = "case_token"
+# Tool results and the request are wrapped in <untrusted_...> tags, which the prompts say are data, never
+# instructions. Only the broken version `injection_defences_off` (evals/broken.py) turns this off.
+MARK_UNTRUSTED = True
+
+
+def escape_untrusted(body: str) -> str:
+    """`body` with any closing `</untrusted_...>` tag neutralised, so text inside a wrapper cannot end it
+    early and pass itself off as instructions."""
+    return body.replace("</untrusted_", "&lt;/untrusted_")
+
+
+def untrusted(source: str, body: str) -> str:
+    if not MARK_UNTRUSTED:
+        return body
+    return f'<untrusted_data source="{source}">\n{escape_untrusted(body)}\n</untrusted_data>'
+
+
 _TOKEN_TEXT = re.compile(r"a15g\.[^\s'\",}\]]*")
 _SDK_PREFIX = re.compile(r"^Error executing tool [\w.-]+: ")
 _PYDANTIC_NOISE = re.compile(r"\s*\[type=[^\]]*\]|\s*For further information visit \S+")
@@ -99,9 +116,7 @@ class McpTool(Tool):
             return ToolResult(text=clean_error(_text(result)), is_error=True)
         payload: Any = result.structured_content if result.structured_content is not None else _text(result)
         body = canonical_json(payload) if not isinstance(payload, str) else payload
-        return ToolResult(
-            text=f'<untrusted_data source="{self.name}">\n{body}\n</untrusted_data>', data=payload
-        )
+        return ToolResult(text=untrusted(self.name, body), data=payload)
 
 
 @dataclass

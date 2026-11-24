@@ -9,6 +9,7 @@ requester, and writes everything to the run directory:
     case.json        the case file: state, history, every handoff
     pack.json        the pack whose hash an approval would sign (when one was assembled)
     letter.md        the letter, for reading
+    refusal.md       the Art. 12(4) refusal letter, when the case was rejected (built by code)
     transcript.json  the full conversation (personal data: never telemetry; runs/ is git-ignored)
     tool_log.jsonl   every tool call with its arguments and result
     events.jsonl     the trace events (no contents)
@@ -57,7 +58,7 @@ from article15.desk.checkpoints import CheckpointStore, Snapshot
 from article15.desk.clock import LINK_REPLY_DELAY, REQUESTER_REPLY_DELAY, SimClock
 from article15.desk.pack import fetch_records, pack_bytes
 from article15.desk.release import ReviewRefused, release
-from article15.desk.session import CaseSession, Pause
+from article15.desk.session import MAX_FOLLOW_UPS, CaseSession, Pause
 from article15.desk.team import REPLY_ARRIVED as team_reply_message
 from article15.desk.team import build_team, coordinator_message
 from article15.desk.team import links_result as team_links_result
@@ -70,10 +71,17 @@ from article15.schemas import AgentName, IdentityOutcome, System
 from article15.scope.authority import ScopeAuthority, ScopeRefused, ScopeResolver, keyed_link_code
 from article15.scope.store import ScopeStore
 from article15.settings import DEFAULT_GRANT_TTL, DEFAULT_TOOL_TIMEOUT_S
-from article15.telemetry.otel import OtelSink, Scrubber, TeeSink, case_tracing, write_spans
+from article15.telemetry.otel import (
+    OtelSink,
+    Scrubber,
+    TeeSink,
+    case_tracing,
+    process_instruments,
+    write_spans,
+)
 
 M2_CASES = ("A15-004", "A15-017", "A15-122", "A15-045", "A15-107")
-MAX_REPLY_ROUNDS = 1  # the generator labels the identity decision after one answered follow-up
+MAX_REPLY_ROUNDS = MAX_FOLLOW_UPS  # the requester answers every follow-up the code allows
 MAX_LINK_ROUNDS = 2  # proof-of-control round trips during discovery (decision 0008)
 CODE = re.compile(r"(?<!\d)(\d{6})(?!\d)")
 # Only code writes to the requester (the follow-up question comes from the identity decision), so no model can
@@ -109,6 +117,8 @@ class RunConfig:
     # Proof-of-control codes: an HMAC of the case and the address under this key. The fixed default makes
     # recorded runs replay; the public web app passes a fresh secret per run (`keyed_link_code`).
     link_code_key: bytes = b"a15-recorded-runs"
+    # Experiment E3: the policy file (default policy.yaml, v1); the evals grade against its R-OTHERS kinds.
+    policy_path: Path | None = None
 
 
 class CaseOutcome(BaseModel):
@@ -149,8 +159,9 @@ class Desk:
     people: dict[str, Person]
 
     @classmethod
-    def load(cls, people: list[Person]) -> Desk:
-        return cls(load_policy(), load_register(), {p.person_id: p for p in people})
+    def load(cls, people: list[Person], policy_path: Path | None = None) -> Desk:
+        policy = load_policy(policy_path) if policy_path else load_policy()
+        return cls(policy, load_register(), {p.person_id: p for p in people})
 
 
 def _write_json(path: Path, value: Any) -> None:
@@ -281,8 +292,10 @@ class CaseTracing:
 
 def open_tracing(case_id: str, desk: Desk) -> CaseTracing:
     extra = []
+    instruments = None
     endpoint = os.environ.get("A15_OTLP_ENDPOINT")
     if endpoint:
+        instruments = process_instruments(endpoint)
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
@@ -290,7 +303,9 @@ def open_tracing(case_id: str, desk: Desk) -> CaseTracing:
     provider, memory = case_tracing(extra)
     key = os.environ.get("A15_TELEMETRY_KEY", "").encode() or TELEMETRY_KEY
     known = [p.name for p in desk.people.values()] + [m for p in desk.people.values() for m in p.mailboxes]
-    sink = OtelSink(provider.get_tracer("article15"), case_id, key, Scrubber.with_values(known))
+    sink = OtelSink(
+        provider.get_tracer("article15"), case_id, key, Scrubber.with_values(known), instruments=instruments
+    )
     return CaseTracing(sink, provider, memory)
 
 
@@ -489,6 +504,11 @@ async def run_case(
     if pack is not None and final.letter is not None:
         (run_dir / "pack.json").write_bytes(pack_bytes(pack))
         (run_dir / "letter.md").write_text(_letter_md(final), encoding="utf-8", newline="\n")
+    if final.refusal is not None:
+        notice = final.refusal
+        (run_dir / "refusal.md").write_text(
+            f"# {notice.subject_line}\n\n{notice.body}\n", encoding="utf-8", newline="\n"
+        )
     _write_json(run_dir / "transcript.json", messages)
     with (run_dir / "tool_log.jsonl").open("w", encoding="utf-8", newline="\n") as f:
         for entry in log:

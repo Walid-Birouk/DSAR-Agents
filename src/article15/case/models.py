@@ -14,6 +14,7 @@ from article15.schemas import (
     DiscoveryResult,
     IdentityDecision,
     IntakeResult,
+    Language,
     LetterDraft,
     RedactionPlan,
     System,
@@ -46,6 +47,30 @@ class Flags(BaseModel):
     special_category_found: bool = False
     possibly_excessive: bool = False
     other_rights_requested: bool = False
+    # Set by code right after identity is verified (case_tools.triage), never by a model:
+    repeat_request: bool = False  # earlier access requests in the 12 months before this one (R-EXCESSIVE)
+    large_request: bool = False  # a history big enough that a person decides on an extension (R-DEADLINE)
+
+
+# What an Art. 12(4) letter must mention: the complaint to the authority and the judicial remedy.
+REFUSAL_MENTIONS = {
+    Language.FR: ("cnil", "recours"),
+    Language.EN: ("cnil", "judicial remedy"),
+}
+
+
+class Notice(BaseModel):
+    """A letter code writes to the requester (the Art. 12(4) refusal, desk/refusal.py)."""
+
+    kind: str
+    language: Language
+    subject_line: str
+    body: str
+
+    def explains_refusal(self) -> bool:
+        """True when it carries what Art. 12(4) requires (checked by guard case.rejection_explained)."""
+        text = self.body.lower()
+        return all(m in text for m in REFUSAL_MENTIONS[self.language])
 
 
 class HumanDecision(BaseModel):
@@ -88,6 +113,7 @@ class Case(BaseModel):
     human_decision: HumanDecision | None = None
     extension_reason: str | None = None
     rejection_reason: str | None = None
+    refusal: Notice | None = None  # the Art. 12(4) letter, built by code when the case is REJECTED
     partial_systems: list[System] = Field(default_factory=list)
     history: list[Transition] = Field(default_factory=list)
 

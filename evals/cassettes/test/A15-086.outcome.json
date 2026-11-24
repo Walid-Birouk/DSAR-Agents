@@ -1,7 +1,7 @@
 {
   "case_id": "A15-086",
-  "final_state": "AWAITING_APPROVAL",
-  "pause": "awaiting_approval",
+  "final_state": "NEEDS_HUMAN",
+  "pause": "with_a_person",
   "stop_reason": "completed",
   "error": null,
   "states": [
@@ -11,10 +11,11 @@
     "DISCOVERY_DONE",
     "REDACTION_DONE",
     "DRAFT_READY",
-    "VALIDATED",
-    "AWAITING_APPROVAL"
+    "REDACTION_DONE",
+    "DRAFT_READY",
+    "NEEDS_HUMAN"
   ],
-  "pack_hash": "66cc7ad4ba6e89c62f124075140c533a2a29995ace26cc3b5bed5f5ffbe1b52f",
+  "pack_hash": "467d1fefc48a83e50d3b9946c1c35031cb43d5a3235dc1e60004041d1aab0d0f",
   "follow_ups": 0,
   "tool_calls": [
     "case_get_status:ok",
@@ -46,15 +47,19 @@
     "advisor_special_category:ok",
     "case_submit_letter:ok",
     "case_read_pack:ok",
+    "case_submit_letter:refused",
+    "case_submit_validation:ok",
+    "case_submit_letter:ok",
+    "case_read_pack:ok",
     "case_submit_validation:ok"
   ],
   "totals": {
-    "calls": 15,
-    "input_tokens": 184160,
-    "cache_hit_tokens": 176768,
-    "output_tokens": 4476,
+    "calls": 19,
+    "input_tokens": 270467,
+    "cache_hit_tokens": 262016,
+    "output_tokens": 7704,
     "reasoning_tokens": 0,
-    "cost_usd": 0.004325
+    "cost_usd": 0.006676
   },
   "policy_version": "1.0.0",
   "prompt_hash": "5544dfe99be6261d",
@@ -64,6 +69,6 @@
   "arm": "single",
   "shadow": false,
   "guard_would_block": [],
-  "elapsed_s": 27.17,
-  "fingerprint": "ad8a827a647bb9ffda877dd4f027f32e57ffba0ed7020268298ef7ec4a1e984a"
+  "elapsed_s": 15.76,
+  "fingerprint": "afb2cf81ca5054332060d82805fc6f6a95335db3e0aa97ebab45c38819856abe"
 }

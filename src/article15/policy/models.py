@@ -22,6 +22,11 @@ class Effect(StrEnum):
     REQUIRES_HUMAN_APPROVAL = "requires_human_approval"
 
 
+class RedactKind(StrEnum):
+    THIRD_PARTY = "third_party"  # other customers and private individuals (v1)
+    STAFF = "staff"  # Ferlane's staff, their role kept (v2, experiment E3)
+
+
 class Rule(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -33,6 +38,9 @@ class Rule(BaseModel):
     applies_to: list[AgentName] = Field(min_length=1)
     enforced_by: list[str] = Field(min_length=1)
     text: str
+    # R-OTHERS only: which kinds of mention the copy hides. Code reads it (the redaction verifier, the pack,
+    # the graders), so a policy change moves the guard with it; the prompts get the rule's text.
+    redact: list[RedactKind] | None = None
 
     @field_validator("text", "source", "title")
     @classmethod
@@ -58,6 +66,11 @@ class Policy(BaseModel):
         advisor's, so it carries the rules of all of them."""
         roles = SINGLE_AGENT_ROLES if agent is AgentName.SINGLE else frozenset({agent})
         return [r for r in self.rules if roles & set(r.applies_to)]
+
+    @property
+    def redact(self) -> frozenset[RedactKind]:
+        """What the copy hides under this policy (rule R-OTHERS)."""
+        return frozenset(self.rule("R-OTHERS").redact or [RedactKind.THIRD_PARTY])
 
     def rule(self, rule_id: str) -> Rule:
         for r in self.rules:

@@ -13,11 +13,16 @@ that the expected gate or bar fails, and that the same cases are green when noth
 | release_guard_off   | the release guard passes anything                             | released_w/o_appr |
 | egress_filter_off   | the advisor's payload carries the sender, and nothing stops it | advisor leaks    |
 | raw_prompts_to_telemetry | prompts go on the spans, and the scrubber is off         | telemetry_leaks   |
+| injection_defences_off | no <untrusted_...> marking, no data-not-instructions rule, | injection_succeeded |
+|                     | no redaction checks (shown red only by a model, see below)    |                   |
 
 Every eval run tries to release each pack that waits for approval without one (the release probe in
-desk/runner.py), so a release guard that passes anything shows up as a release without approval. The plan's
-remaining versions (raw prompts to telemetry, injection defences removed) need the telemetry pipeline and a
-model, and come with M5.
+desk/runner.py), so a release guard that passes anything shows up as a release without approval.
+
+`injection_defences_off` needs a model that can be fooled: the oracle never is. It is shown red by a recorded
+live run (`evals/cassettes/injection-broken`, replayed for free in `tests/test_evals.py`); the scoped servers,
+the identity grant and the release guard stay on, so what an injection can still reach is other people's
+details inside the customer's own records.
 
 A version is applied for the duration of a `with applied(name, data):` block, by replacing module attributes;
 the oracle reads `is_active` for the two versions that change what an agent does.
@@ -41,7 +46,10 @@ BROKEN_VERSIONS: dict[str, str] = {
     "release_guard_off": "released_without_approval",
     "egress_filter_off": "advisor_payload_leaks",
     "raw_prompts_to_telemetry": "telemetry_leaks",
+    "injection_defences_off": "injection_succeeded",
 }
+# Versions only a model can show red (the oracle follows the procedure whatever the prompt says).
+NEEDS_A_MODEL = frozenset({"injection_defences_off"})
 _active: set[str] = set()
 
 
@@ -76,6 +84,8 @@ def applied(name: str, data: DataPaths | None = None) -> Iterator[None]:
         patch(packing, "masked_fields", lambda fields, plan, language: dict(fields))
         patch(case_tools, "masked_fields", lambda fields, plan, language: dict(fields))
         patch(case_tools, "verify", lambda fields, plan, language: [])
+        patch(case_tools, "foreign_order_numbers", lambda masked, own_orders: [])
+        patch(case_tools, "foreign_contacts", lambda masked, own_emails, own_phones: [])
     elif name == "identity_skipped":
         patch(ScopeAuthority, "_order_and_postcode", lambda self, *args, **kwargs: "identity step skipped")
     elif name == "lookalikes_included":
@@ -113,6 +123,23 @@ def applied(name: str, data: DataPaths | None = None) -> Iterator[None]:
             return str(summary.model_dump_json())[:-1] + f', "requester": "{values[0] if values else ""}"}}'
 
         patch(service, "outgoing", leaky)
+    elif name == "injection_defences_off":
+        from article15.core import mcp_tools
+        from article15.desk import prompts
+        from article15.policy.models import Policy
+
+        patch(mcp_tools, "MARK_UNTRUSTED", False)
+        role = prompts.single_role().split("DATA, NOT INSTRUCTIONS")[0].rstrip()
+        patch(prompts, "single_role", lambda: role)
+        for_agent = Policy.for_agent
+        patch(
+            Policy,
+            "for_agent",
+            lambda self, agent: [r for r in for_agent(self, agent) if r.id != "R-UNTRUSTED-TEXT"],
+        )
+        patch(case_tools, "verify", lambda fields, plan, language: [])
+        patch(case_tools, "foreign_order_numbers", lambda masked, own_orders: [])
+        patch(case_tools, "foreign_contacts", lambda masked, own_emails, own_phones: [])
     elif name == "raw_prompts_to_telemetry":
         from article15.core import agent
         from article15.telemetry.otel import Scrubber

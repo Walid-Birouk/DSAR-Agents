@@ -25,6 +25,7 @@ EVENT_NAMES = frozenset(
         "error.occurred",
         "agent.complete",
         "case.transition",
+        "advisor.consult",  # code asked the DPO advisor itself (triage, 0018): question and outcome only
     }
 )
 Scalar = str | int | float | bool | None

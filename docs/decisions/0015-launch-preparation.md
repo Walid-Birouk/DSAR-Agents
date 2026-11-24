@@ -1,9 +1,7 @@
 # 0015: Launch preparation (M7, the parts that need no account)
 
-**Status: provisional.** Made on 2026-11-22 while the project owner was away, to be confirmed or changed
-(see [pending-review.md](pending-review.md), P40 to P46). Nothing was deployed, pushed or published: the public
-launch needs the owner's server account, domain and GitHub repository, and a public red-team round needs a public
-URL.
+**Status: accepted** on 2026-11-23, after starting as provisional choices ([0018](0018-provisional-choices-settled.md)
+says what changed).
 
 **Decision.**
 - **The input detector** (`web/guards.py`, PLAN.md 11.3) refuses any visitor text that holds:
@@ -41,11 +39,11 @@ URL.
 - Every protection the plan lists for the public demo can be built and tested before there is a server, so the
   launch itself becomes configuration.
 
-**Given up (waiting for the owner).**
-- The live deployment and its HTTPS, and monitoring alerts sent to the owner.
+**Not done yet.**
+- The live deployment and its HTTPS, and monitoring alerts sent to the operator.
 - The public red-team round.
 - The full eval on the test split, the 3-run spread, E3 and E4 (they need a model key).
-- The video and the CV lines.
+- The video.
 
 **Tested by.**
 - `tests/test_web_guards.py`:

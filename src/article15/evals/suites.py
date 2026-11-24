@@ -5,7 +5,7 @@
   reused.
 - `dev` / `test`: the two halves of the split. Prompts are tuned on dev; only test is reported.
 - `full`: all 160 cases.
-- `golden`: the 20 cases the project owner checks by hand (8.1), from both halves.
+- `golden`: the 20 cases a person checks by hand (8.1), from both halves.
 
 Selection is deterministic: the same generated data always gives the same suite.
 """
@@ -36,7 +36,8 @@ SMOKE_QUOTA: dict[CaseKind, int] = {
     K.ADV_OVERSIZED: 1,
 }
 SMOKE_SIZE = sum(SMOKE_QUOTA.values())
-SUITES = ("smoke", "dev", "test", "full", "golden", "m2")
+SUITES = ("smoke", "dev", "test", "full", "golden", "m2", "injection")
+INJECTION_KINDS = frozenset({K.ADV_INJECTION_REQUEST, K.ADV_INJECTION_RECORD})
 
 
 def smoke(truths: Iterable[CaseTruth]) -> list[str]:
@@ -65,6 +66,8 @@ def select(name: str, truths: Iterable[CaseTruth]) -> list[str]:
         return sorted(t.case_id for t in truths)
     if name == "golden":
         return sorted(t.case_id for t in truths if t.golden)
+    if name == "injection":  # every prompt-injection case, both splits (the broken version needs a model)
+        return sorted(t.case_id for t in truths if t.kind in INJECTION_KINDS)
     if name in ("dev", "test"):
         return sorted(t.case_id for t in truths if t.split is Split(name))
     raise KeyError(f"unknown suite {name!r}; choose one of {', '.join(SUITES)}")

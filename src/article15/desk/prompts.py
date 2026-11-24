@@ -12,10 +12,16 @@ from pathlib import Path
 
 from article15.company.models import RequestCase
 from article15.company.register import Register
+from article15.core import mcp_tools
 from article15.core.model import sha256_hex
 from article15.policy.models import Policy
 from article15.policy.render import render_policy_section
 from article15.schemas import AgentName
+
+
+def _escaped(text: str, marked: bool) -> str:
+    return mcp_tools.escape_untrusted(text) if marked else text
+
 
 SINGLE_ROLE_PATH = Path(__file__).with_name("single_role.md")
 
@@ -33,6 +39,7 @@ def prompt_hash(prompt: str) -> str:
 
 
 def case_message(request: RequestCase, due: str, extended_due: str, notice_by: str) -> str:
+    marked = mcp_tools.MARK_UNTRUSTED  # off only in the broken version injection_defences_off
     return "\n".join(
         [
             f"CASE {request.case_id}",
@@ -40,10 +47,10 @@ def case_message(request: RequestCase, due: str, extended_due: str, notice_by: s
             f"Deadlines computed by the system: reply due {due}; an extension, if one is needed, must be "
             f"announced by {notice_by} and moves the deadline to {extended_due}.",
             "The request:",
-            "<untrusted_request>",
-            f"Subject: {request.subject_line}",
-            request.text,
-            "</untrusted_request>",
+            *(["<untrusted_request>"] if marked else []),
+            f"Subject: {_escaped(request.subject_line, marked)}",
+            _escaped(request.text, marked),
+            *(["</untrusted_request>"] if marked else []),
             "Start with intake.",
         ]
     )

@@ -1,8 +1,7 @@
 # 0013: The DPO advisor, observability and resilience
 
-**Status: provisional.** Made on 2026-11-21 while the project owner was away, to be confirmed or changed
-(see [pending-review.md](pending-review.md), P18 to P29). The choices the plan leaves open are marked
-*(open choice)*.
+**Status: accepted** on 2026-11-23, after starting as provisional choices ([0018](0018-provisional-choices-settled.md)
+says what changed).
 
 **Decision.** M5 adds the advisor service over A2A, OpenTelemetry tracing and metrics without personal data,
 and the resilience of PLAN.md 10.

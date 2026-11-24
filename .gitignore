@@ -29,3 +29,9 @@ Thumbs.db
 
 # deployment secrets
 deploy/production.env
+
+# local agent tooling (per machine)
+.agents/
+.aider-desk/
+.claude/
+skills-lock.json

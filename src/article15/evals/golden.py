@@ -1,4 +1,4 @@
-"""The golden 20: the cases the project owner checks by hand (PLAN.md 8.1).
+"""The golden 20: the cases a person checks by hand (PLAN.md 8.1).
 
 The generator writes its own labels, so a person must confirm that they are right before the eval numbers
 mean anything. `a15 eval golden` writes a review sheet with everything a reviewer needs for each golden case
